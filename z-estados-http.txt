@@ -1,0 +1,44 @@
+Códigos informativos (1xx):
+
+HTTP_100_CONTINUE: El cliente debe continuar con su solicitud.
+HTTP_101_SWITCHING_PROTOCOLS: El servidor acepta cambiar el protocolo.
+
+Códigos de éxito (2xx):
+
+HTTP_200_OK: La solicitud se ha realizado con éxito.
+HTTP_201_CREATED: Un recurso se ha creado correctamente.
+HTTP_202_ACCEPTED: La solicitud se ha aceptado para procesarse más tarde.
+HTTP_203_NON_AUTHORITATIVE_INFORMATION: Información devuelta con éxito, pero no es confiable.
+HTTP_204_NO_CONTENT: La solicitud se realizó con éxito, pero no hay contenido que devolver.
+HTTP_205_RESET_CONTENT: Indica que el cliente debe restablecer su vista (como un formulario).
+HTTP_206_PARTIAL_CONTENT: Devuelve parte del contenido solicitado.
+
+Códigos de redirección (3xx):
+
+HTTP_300_MULTIPLE_CHOICES: Hay varias opciones para la respuesta.
+HTTP_301_MOVED_PERMANENTLY: El recurso se ha movido de forma permanente.
+HTTP_302_FOUND: Redirección temporal al recurso.
+HTTP_303_SEE_OTHER: Redirección usando un método GET.
+HTTP_304_NOT_MODIFIED: Indica que no hay cambios en el recurso.
+HTTP_307_TEMPORARY_REDIRECT: Redirección temporal.
+
+Códigos de error del cliente (4xx):
+
+HTTP_400_BAD_REQUEST: La solicitud es inválida o no tiene el formato correcto.
+HTTP_401_UNAUTHORIZED: El cliente no está autenticado.
+HTTP_403_FORBIDDEN: El cliente no tiene permiso para acceder al recurso.
+HTTP_404_NOT_FOUND: El recurso solicitado no existe.
+HTTP_405_METHOD_NOT_ALLOWED: El método HTTP usado no está permitido.
+HTTP_406_NOT_ACCEPTABLE: La respuesta no es aceptable según las preferencias del cliente.
+HTTP_408_REQUEST_TIMEOUT: El cliente no envió la solicitud a tiempo.
+HTTP_409_CONFLICT: Conflicto con el estado actual del recurso.
+HTTP_410_GONE: El recurso solicitado ya no está disponible.
+HTTP_415_UNSUPPORTED_MEDIA_TYPE: Tipo de contenido no soportado.
+
+Códigos de error del servidor (5xx):
+
+HTTP_500_INTERNAL_SERVER_ERROR: Error interno del servidor.
+HTTP_501_NOT_IMPLEMENTED: El servidor no soporta la funcionalidad requerida.
+HTTP_502_BAD_GATEWAY: Error al procesar una respuesta desde un servidor proxy.
+HTTP_503_SERVICE_UNAVAILABLE: El servidor no está disponible.
+HTTP_504_GATEWAY_TIMEOUT: El servidor no recibió una respuesta a tiempo.

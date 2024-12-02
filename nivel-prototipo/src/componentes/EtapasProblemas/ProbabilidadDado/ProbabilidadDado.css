@@ -1,0 +1,163 @@
+/* General Layout for two columns */
+.problema-grid {
+    display: grid;
+    grid-template-columns: 65% 35%;
+    gap: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+    font-family: Arial, sans-serif;
+    padding-left: 200px;
+}
+
+/* Enunciado */
+.enunciado {
+    grid-column: 1 / span 2; /* Full-width */
+    text-align: center;
+    font-size: 24px;
+    font-weight: bold;
+    background-color: #14361203;
+    border-radius: 15px;
+    padding: 15px;
+    box-shadow: 0px 8px 15px rgba(21, 255, 0, 0.708);
+}
+
+/* Left Column - Event and Sample Space */
+.columna-izquierda {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+/* Right Column - Probability */
+.columna-derecha {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+/* Filas */
+.fila {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    background-color: rgba(108, 108, 108, 0.922);
+    border-radius: 15px;
+    padding: 15px;
+}
+
+/* Tarjetas */
+.tarjeta {
+    background-color: #f3f4f6;
+    padding: 15px;
+    border-radius: 12px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    flex: 1;
+}
+
+/* Flecha */
+.flecha {
+    font-size: 24px;
+    color: #0dff00;
+}
+
+/* Evento, Espacio Muestral y Probabilidad Descripción */
+.evento-descripcion h1,
+.espacio-muestral-descripcion h1,
+.probabilidad-descripcion h1 {
+    font-size: 20px;
+    color: #333;
+}
+
+/* Selección de Números */
+.numeros {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.numero {
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #fff;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 18px;
+    color: #333;
+    transition: background-color 0.3s, transform 0.3s;
+}
+
+.numero.seleccionado {
+    background-color: #8f27aa;
+    color: white;
+    transform: scale(1.1);
+}
+
+.numero:hover {
+    background-color: #e2fae0;
+}
+
+/* Contador de selección */
+.contador {
+    margin-top: 10px;
+    font-weight: bold;
+    color: #555;
+}
+
+/* Estilo de Fracción en la Probabilidad */
+.fraccion {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: 20px;
+}
+
+.numerador,
+.denominador {
+    width: 80px;
+    padding: 8px;
+    text-align: center;
+    font-size: 16px;
+    border-radius: 8px;
+    border: 2px solid #8f27aa;
+    margin-top: 5px;
+}
+
+.linea-fraccion {
+    width: 80px;
+    height: 2px;
+    background-color: #8f27aa;
+    margin: 4px 0;
+}
+
+/* Botones */
+button {
+    margin-top: 10px;
+    padding: 8px 12px;
+    font-size: 16px;
+    font-weight: 500;
+    background-color: #8f27aa;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+button:hover {
+    background-color: #4bf21d;
+    color: black;
+}
+
+/* Mensaje de Validación */
+.mensaje-validacion {
+    margin-top: 10px;
+    color: #4caf50;
+    font-weight: bold;
+}
