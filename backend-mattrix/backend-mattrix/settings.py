@@ -13,12 +13,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-8b$o9^5^su-xmy0k2pa5zife29nizpck#-@t^s%%2lust%bn9u'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = [
     '127.0.0.1', 
     'localhost', 
-    'bd8a-179-9-134-43.ngrok-free.app'
+    'bd8a-179-9-134-43.ngrok-free.app',
+    'mattrixx.onrender.com',
+    'mattrix.onrender.com',
     ]
 
 
