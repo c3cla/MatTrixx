@@ -7,5 +7,4 @@ urlpatterns = [
     path('mattrix_admin/', include('mattrix_admin.urls')),
     path('mattrix_usuarios/', include('mattrix_usuarios.urls')),
     path('mattrix_contenido/', include('mattrix_contenido.urls')),
-    path('', FrontendAppView.as_view(), name='frontend'),
 ]
