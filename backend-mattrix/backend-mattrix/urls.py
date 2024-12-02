@@ -1,6 +1,5 @@
 from django.contrib import admin
 from django.urls import include, path
-from react.views import FrontendAppView 
 
 urlpatterns = [
     path('api/admin/', admin.site.urls),
