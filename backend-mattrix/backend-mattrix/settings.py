@@ -19,8 +19,6 @@ ALLOWED_HOSTS = [
     '127.0.0.1', 
     'localhost', 
     'bd8a-179-9-134-43.ngrok-free.app',
-    'mattrixx.onrender.com',
-    'mattrix.onrender.com',
     ]
 
 
@@ -82,9 +80,14 @@ WSGI_APPLICATION = 'backend-mattrix.wsgi.application'
 
 
 DATABASES = {
-    'default': dj_database_url.config(
-        default=os.getenv('DATABASE_URL')
-    )
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'mattrixdb',
+        'USER': 'mattrixuser',
+        'PASSWORD': '1234qwer',
+        'HOST': 'localhost',
+        'PORT': '',
+    }
 }
 
 
