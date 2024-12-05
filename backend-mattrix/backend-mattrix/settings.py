@@ -93,8 +93,9 @@ MIDDLEWARE = [
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
-    'http://35.87.82.233',
-    'https://mathrix.cl'
+    'https://35.87.82.233',
+    'https://mathrix.cl',
+    'https://www.mathrix.cl',
 ]
 
 CORS_ALLOW_CREDENTIALS = True
