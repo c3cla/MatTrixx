@@ -32,7 +32,7 @@ class ContenidoAdmin(SimpleHistoryAdmin):
 
 @admin.register(Etapas)
 class ContenidoAdmin(SimpleHistoryAdmin):
-    list_display = ('OA', 'id_nivel')
+    list_display = ('id_etapa', 'id_nivel', 'OA')
     search_fields = ('OA', 'id_nivel')
     ordering = ('id_nivel','OA')
 

@@ -28,10 +28,13 @@ class IndicadoresEvaluacionSerializer(serializers.ModelSerializer):
 #Niveles
 class NivelesSerializer(serializers.ModelSerializer):
     OA = OASerializer()
+    fondo = serializers.ImageField(source='fondo.imagen', read_only=True)
+    fondo_tarjeta = serializers.ImageField(source='fondo_tarjeta.imagen', read_only=True)
+
 
     class Meta:
         model = Niveles
-        fields = '__all__'
+        fields = ['id_nivel', 'nombre', 'fondo', 'fondo_tarjeta', 'OA']
 
 
 #Etapas
@@ -39,12 +42,15 @@ class NivelesSerializer(serializers.ModelSerializer):
 class EtapasSerializer(serializers.ModelSerializer):
     id_nivel = serializers.PrimaryKeyRelatedField(queryset=Niveles.objects.all())
     nivel = NivelesSerializer(read_only=True, source='id_nivel')
-    habilidad = serializers.CharField()
+    contenido_abordado = serializers.CharField()
+    habilidad_matematica = serializers.CharField()
+    habilidad_bloom = serializers.CharField()
     dificultad = serializers.CharField()
+    es_ultima = serializers.BooleanField()
 
     class Meta:
         model = Etapas
-        fields = ['id_etapa', 'nombre', 'descripcion', 'componente', 'id_nivel', 'nivel', 'habilidad', 'dificultad', 'posicion_x', 'posicion_y']
+        fields = ['id_etapa', 'nombre', 'descripcion', 'componente', 'id_nivel', 'nivel', 'contenido_abordado', 'habilidad_matematica', 'habilidad_bloom','dificultad', 'es_ultima', 'posicion_x', 'posicion_y']
 
 
 

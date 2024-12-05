@@ -1,16 +1,18 @@
 ###################### INICIO IMPORTACIONES ######################
+from django.contrib.auth.models import User
 
 from rest_framework import serializers
 
-from .models import AvanceEstudiantes, DocenteEstudiante
+from .models import AvanceEstudiantes, DocenteEstudiante, RespuestaEscrita
 
+from mattrix_contenido.models import Etapas
 from mattrix_contenido.serializers import EtapasSerializer
 
 ###################### FIN IMPORTACIONES ########################
 
 #--------------------------  INICIO SERIALIZERS  --------------------------#
 
-#Muestra los estudiantes por docente ??? 
+#Permite solicitar docentes y ver solicitudes de estudiante para unirse a docente
 class DocenteEstudianteSerializer(serializers.ModelSerializer):
     estudiante_nombre_completo = serializers.SerializerMethodField()
     estudiante_rut = serializers.SerializerMethodField()
@@ -24,12 +26,41 @@ class DocenteEstudianteSerializer(serializers.ModelSerializer):
 
     def get_estudiante_rut(self, obj):
         return obj.estudiante.rut
-    
 
-#Avance Estudiantes
+
+class RespuestaEscritaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RespuestaEscrita
+        fields = ['id', 'avance', 'pregunta', 'respuesta', 'retroalimentacion']
+
+#Avance Estudiantes: permite definir etapas completadas
 class AvanceEstudiantesSerializer(serializers.ModelSerializer):
     etapa = EtapasSerializer()
+    respuestas_escritas = RespuestaEscritaSerializer(many=True, read_only=True)
 
     class Meta:
         model = AvanceEstudiantes
-        fields = ['id', 'etapa', 'tiempo', 'fecha_completada', 'logro']
+        fields = ['id_avance', 'etapa', 'tiempo', 'fecha_completada', 'logro', 'respuestas_escritas']
+
+
+#Permite registrar nuevos avances en el modelo al finalizar una etapa
+class RegistroAvanceEstudiantesSerializer(serializers.Serializer):
+    estudiante_id = serializers.IntegerField()
+    etapa = serializers.IntegerField()
+    tiempo = serializers.CharField()
+    logro = serializers.IntegerField()
+    respuestas_escritas = serializers.ListField(
+        child=serializers.DictField(
+            child=serializers.CharField()
+        ),
+        required=False  # Este campo no es obligatorio
+    )
+
+    def validate(self, data):
+        # Validación personalizada si es necesario
+        if not User.objects.filter(pk=data["estudiante_id"]).exists():
+            raise serializers.ValidationError({"estudiante_id": "El estudiante no existe."})
+        if not Etapas.objects.filter(pk=data["etapa"]).exists():
+            raise serializers.ValidationError({"etapa": "La etapa no existe."})
+        return data
+

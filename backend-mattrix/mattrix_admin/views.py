@@ -1,6 +1,8 @@
 ###################### INICIO IMPORTACIONES ######################
 
-from rest_framework import generics, status
+from rest_framework import generics, status, request
+from rest_framework.decorators import api_view, permission_classes
+
 from rest_framework.permissions import IsAuthenticated, AllowAny #El usuario inicio sesión y tiene un token asociado
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -76,6 +78,18 @@ class ColegioAPIView(APIView):
             return Response({"detalle": "El colegio no existe."}, status=status.HTTP_404_NOT_FOUND)
         colegio.delete()
         return Response({"detalle": "Colegio eliminado con éxito."}, status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def cursos_por_colegio(request, pk):
+    try:
+        colegio = Colegio.objects.get(pk=pk)
+        cursos = Cursos.objects.filter(colegio=colegio)
+        serializer = CursosSerializer(cursos, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Colegio.DoesNotExist:
+        return Response({"detail": "Colegio no encontrado."}, status=status.HTTP_404_NOT_FOUND)
 
 
 

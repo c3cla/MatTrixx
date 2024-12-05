@@ -2,6 +2,8 @@
 
 from django.db import models
 
+from mattrix_usuarios.models import Imagenes
+
 ###################### FIN IMPORTACIONES ########################
 
 #------------------------------  INICIO MODELOS  ------------------------------#
@@ -41,7 +43,22 @@ class Niveles(models.Model):
     id_nivel = models.CharField(primary_key=True, max_length=10)
     nombre = models.CharField(max_length=255)
     OA = models.ForeignKey(OA, on_delete=models.CASCADE)
-    
+    fondo = models.ForeignKey(
+        Imagenes,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        limit_choices_to={'uso': 'fondo-nivel'},
+        related_name='niveles'
+    )
+    fondo_tarjeta = models.ForeignKey(
+        Imagenes,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        limit_choices_to={'uso': 'fondo-nivel'},
+        related_name='tarjetas_niveles'
+    )
 
     def __str__(self):
         return self.nombre
@@ -53,6 +70,7 @@ class Etapas(models.Model):
     OA = models.ForeignKey(OA, on_delete=models.CASCADE)
     nombre = models.CharField(max_length=255)
     descripcion = models.TextField()
+    contenido_abordado = models.TextField()
     componente = models.TextField()
     DIFICULTAD = [
         ("Baja", "Baja"),
@@ -60,13 +78,23 @@ class Etapas(models.Model):
         ("Alta", "Alta"),
     ]
     dificultad = models.TextField(max_length=50, choices=DIFICULTAD)
-    HABILIDAD = [
+    HABILIDAD_MATEMATICA = [
         ("Argumentar", "Argumentar"),
         ("Modelar", "Modelar"),
         ("Representrar", "Representrar"),        
         ("Resolución de problemas", "Resolución de problemas"),        
     ]
-    habilidad = models.TextField(max_length=50, choices=HABILIDAD)
+    habilidad_matematica = models.TextField(max_length=50, choices=HABILIDAD_MATEMATICA)
+    HABILIDAD_BLOOM = [
+        ("Conocer", "Conocer"),
+        ("Comprender", "Comprender"),
+        ("Aplicar", "Aplicar"),        
+        ("Analizar", "Analizar"),
+        ("Evaluar", "Evaluar"),  
+        ("Crear", "Crear"),          
+    ]
+    habilidad_bloom = models.TextField(max_length=50, choices=HABILIDAD_BLOOM)
+    es_ultima = models.BooleanField(default=False)
     posicion_x = models.IntegerField()
     posicion_y = models.IntegerField()
     
@@ -79,7 +107,12 @@ class Etapas(models.Model):
 #Términos pareados: en uso debe ir la etapa en la que usa
 class TerminosPareados(models.Model):
     id_termino = models.AutoField(primary_key=True)
-    uso = models.CharField(max_length=255)
+    USOS = [
+        ("conceptos", "conceptos"),
+        ("experimentos", "experimentos"),
+        ("agrupar_experimentos", "agrupar_experimentos")
+    ]
+    uso = models.CharField(max_length=255, choices=USOS)
     concepto = models.CharField(max_length=255)
     definicion = models.TextField()
 

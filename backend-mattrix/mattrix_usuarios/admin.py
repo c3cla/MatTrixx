@@ -3,18 +3,18 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
 
-from .models import Profile
+from .models import Profile, Imagenes
 ###################### FIN IMPORTACIONES ########################
 
 #Define vista y administración de Profile en el panel admin
 @admin.register(Profile)
 class ProfileAdmin(admin.ModelAdmin):
-    list_display = ('user', 'get_full_name', 'get_email', 'rol', 'curso')
+    list_display = ('user', 'get_full_name', 'get_email', 'rol', 'curso', 'avatarUser')
     list_filter = ('rol',)
     search_fields = ('user__username', 'user__first_name', 'user__last_name', 'user__email')
     ordering = ('rol','user')
     actions = ['make_teacher', 'make_admin']
-    fields = ('user', 'rol','pais', 'rut', 'colegio', 'curso') 
+    fields = ('user', 'rol', 'avatarUser', 'pais', 'rut', 'colegio', 'curso') 
 
     def make_teacher(self, request, queryset):
         queryset.update(rol='teacher')
@@ -46,6 +46,13 @@ class ProfileInline(admin.StackedInline):
 class UserAdmin(BaseUserAdmin):
     inlines = (ProfileInline,)
 
+#Permite administrar imagenes
+@admin.register(Imagenes)
+class ImagenesAdmin(admin.ModelAdmin):
+    list_display = ('id_imagen', 'uso', 'imagen')
+    list_filter = ('uso',)
+    search_fields = ('imagen',)
+    ordering = ('uso', 'id_imagen')
 
 #Elimina configuración predeterminada de django para gestionar el modelo User
 admin.site.unregister(User)

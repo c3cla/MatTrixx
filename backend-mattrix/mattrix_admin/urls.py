@@ -7,7 +7,7 @@ from drf_yasg import openapi
 
 from rest_framework.permissions import AllowAny
 
-from .views import ColegioAPIView, CursosAPIView
+from .views import ColegioAPIView, CursosAPIView, cursos_por_colegio
 
 ###################### FIN IMPORTACIONES ########################
 
@@ -29,5 +29,7 @@ urlpatterns = [
     path('colegios/<int:pk>/', ColegioAPIView.as_view(), name='put-delete-colegios'),
     path('cursos/', CursosAPIView.as_view(), name='get-post-cursos'),
     path('cursos/<int:pk>/', CursosAPIView.as_view(), name='put-delete-cursos'),
+    path('colegios/<int:pk>/cursos/', cursos_por_colegio, name='get-cursos-por-colegio'),
+
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
 ]

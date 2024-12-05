@@ -40,6 +40,15 @@ class NivelesViewSet(viewsets.ModelViewSet):
     search_fields = ['id_nivel']
     permission_classes = [AllowAny]
 
+class NivelesDetalleView(APIView):
+    def get(self, request, id_nivel):
+        try:
+            nivel = Niveles.objects.get(id_nivel=id_nivel)
+            serializer = NivelesSerializer(nivel)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Niveles.DoesNotExist:
+            return Response({'error': 'Nivel no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+
 class EtapasViewSet(viewsets.ModelViewSet):
     queryset = Etapas.objects.all()
     serializer_class = EtapasSerializer
@@ -55,7 +64,6 @@ class TerminosPareadosViewSet(viewsets.ModelViewSet):
     serializer_class = TerminosPareadosSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_class = TerminoPareadoFilter
-    search_fields = ['uso']
     permission_classes = [AllowAny]
 
 class ProblemaProbabilidadView(APIView):

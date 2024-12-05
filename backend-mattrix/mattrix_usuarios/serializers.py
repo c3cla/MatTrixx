@@ -9,33 +9,67 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from mattrix_admin.models import Colegio, Cursos
 
-from .models import Profile
+from .models import Profile, Imagenes
 
 ###################### FIN IMPORTACIONES ########################
 
-#Crea usuarios "básicos" con rol estudiante y elimina usuarios
-class UserSerializer(serializers.ModelSerializer):
+class ProfileSerializer(serializers.ModelSerializer): 
+    nombre_completo = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Profile
+        fields = ['pais', 'rut', 'rol', 'colegio', 'curso']
+
+    def validate(self, data):
+        if not data.get('pais'):
+            raise serializers.ValidationError({"pais": "El campo país es obligatorio."})
+        if not data.get('rut'):
+            raise serializers.ValidationError({"rut": "El campo RUT es obligatorio."})
+        return data
+
+    def get_nombre_completo(self, obj):
+        return f"{obj.user.first_name} {obj.user.last_name}"
+    
+class UsuarioSerializer(serializers.ModelSerializer):
+    # Incluir un serializer para manejar el modelo Profile
+    profile = ProfileSerializer()
+
     class Meta:
         model = User
-        fields = ["id", "username", "password", "email", "first_name", "last_name"]
+        fields = [
+            'id',
+            'username',
+            'password',
+            'first_name',
+            'last_name',
+            'email',
+            'profile',  # Agregamos el campo profile
+        ]
         extra_kwargs = {"password": {"write_only": True}}
 
-    def create(self, datos_validados):
-        user = User.objects.create_user(
-            username=datos_validados["username"],
-            password=datos_validados["password"],
-            email=datos_validados.get("email", ""),
-            first_name=datos_validados.get("first_name", ""),
-            last_name=datos_validados.get("last_name", "")
-        )
+    def create(self, validated_data):
+        # Extraer los datos del perfil
+        profile_data = validated_data.pop('profile', {})
+        password = validated_data.pop('password', None)
+
+        # Crear el usuario
+        user = User(**validated_data)
+        if password:
+            user.set_password(password)
+        user.save()
+
+        # Crear el perfil relacionado
+        Profile.objects.create(user=user, **profile_data)
+
         return user
 
-    @receiver(post_delete, sender=User)
-    def eliminar_profile_usuario(sender, instance, **kwargs):
-        try:
-            instance.profile.delete()
-        except Profile.DoesNotExist:
-            pass
+
+
+
+
+
+
+
 
 
 #Lista usuarios existentes
@@ -51,14 +85,17 @@ class UsuarioListSerializer(serializers.ModelSerializer):
 
 #Crea una clase Usuario con la información de Perfil y User agrupadas
 class UsuarioSerializer(serializers.ModelSerializer):
-    rol = serializers.CharField(source='profile.rol', required=False)
-    pais = serializers.CharField(source='profile.pais', required=False)
-    rut = serializers.CharField(source='profile.rut', required=False)
+    avatarUser = serializers.PrimaryKeyRelatedField(
+        queryset=Imagenes.objects.all(), required=False
+    )
+    rol = serializers.CharField(required=False)
+    pais = serializers.CharField(required=True)
+    rut = serializers.CharField(required=True)
     colegio = serializers.PrimaryKeyRelatedField(
-        queryset=Colegio.objects.all(), source='profile.colegio', required=False
+        queryset=Colegio.objects.all(), required=False
     )
     curso = serializers.PrimaryKeyRelatedField(
-        queryset=Cursos.objects.all(), source='profile.curso', required=False
+        queryset=Cursos.objects.all(), required=False
     )
 
     class Meta:
@@ -72,6 +109,7 @@ class UsuarioSerializer(serializers.ModelSerializer):
             'email',
             'pais',
             'rut',
+            'avatarUser',
             'rol',
             'colegio',
             'curso',
@@ -79,7 +117,14 @@ class UsuarioSerializer(serializers.ModelSerializer):
         extra_kwargs = {"password": {"write_only": True}}
 
     def create(self, datos_validados):
-        datos_profile = datos_validados.pop('profile', {})
+        datos_profile = {
+        'avatarUser': datos_validados.pop('avatarUser', '1'),
+        'rol': datos_validados.pop('rol', 'student'),
+        'pais': datos_validados.pop('pais', 'Chile'),
+        'rut': datos_validados.pop('rut', ''),
+        'colegio': datos_validados.pop('colegio', '1'),
+        'curso': datos_validados.pop('curso', '1'),
+        }
         contraseña = datos_validados.pop('password', None)
 
         # Crear usuario
@@ -91,18 +136,19 @@ class UsuarioSerializer(serializers.ModelSerializer):
         # Crear o actualizar el profile asociado
         Profile.objects.update_or_create(
             user=user,
-            defaults={
-                'rol': datos_profile.get('rol', 'student'),
-                'pais': datos_profile.get('pais', 'Chile'),
-                'rut': datos_profile.get('rut', ''),
-                'colegio': datos_profile.get('colegio'),
-                'curso': datos_profile.get('curso'),
-            },
+            defaults=datos_profile,
         )
         return user
 
     def update(self, instance, datos_validados):
-        datos_profile = datos_validados.pop('profile', {})
+        datos_profile = {
+            'avatarUser': datos_validados.pop('avatarUser', None),
+            'rol': datos_validados.pop('rol', None),
+            'pais': datos_validados.pop('pais', None),
+            'rut': datos_validados.pop('rut', None),
+            'colegio': datos_validados.pop('colegio', None),
+            'curso': datos_validados.pop('curso', None),
+        }
 
         # Actualizar usuario
         for atributo, valor in datos_validados.items():
@@ -112,15 +158,17 @@ class UsuarioSerializer(serializers.ModelSerializer):
         # Actualizar profile asociado
         Profile.objects.update_or_create(
             user=instance,
-            defaults={
-                'rol': datos_profile.get('rol', 'student'),
-                'pais': datos_profile.get('pais', 'Chile'),
-                'rut': datos_profile.get('rut', ''),
-                'colegio': datos_profile.get('colegio'),
-                'curso': datos_profile.get('curso'),
-            },
+            defaults={k: v for k, v in datos_profile.items() if v is not None},
         )
         return instance
+
+class ActualizarAvatarSerializer(serializers.Serializer):
+    id_imagen = serializers.IntegerField(required=True)
+
+    def validate_id_imagen(self, value):
+        if not Imagenes.objects.filter(id=value).exists():
+            raise serializers.ValidationError("El avatar no existe.")
+        return value
 
 
 #Agrega a la información del token el rol del usuario
@@ -150,25 +198,26 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             datos['user'] = {
                 'id': self.user.id,
                 'rol': profile.rol,
-                'username': self.user.username
+                'username': self.user.username,
+                'avatarUser': self.context['request'].build_absolute_uri(profile.avatarUser.imagen.url)
             }
         except Profile.DoesNotExist:
             datos['user'] = {
                 'id': self.user.id,
                 'rol': 'indefinido',
-                'username': self.user.username
+                'username': self.user.username,
+                'avatarUser': None,
             }
 
         return datos
 
 
-#### ¿PARA QUÉ SIRVEEE? ####
 class ProfileSerializer(serializers.ModelSerializer):
     nombre_completo = serializers.SerializerMethodField() 
 
     class Meta:
         model = Profile
-        fields = ['id', 'user', 'nombre_completo', 'role'] 
+        fields = ['pais', 'rut', 'rol', 'colegio', 'curso']
 
     def get_nombre_completo(self, obj):       
         return f"{obj.user.first_name} {obj.user.last_name}"
