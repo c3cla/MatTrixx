@@ -23,6 +23,7 @@ ALLOWED_HOSTS = [
     'localhost', 
     'bd8a-179-9-134-43.ngrok-free.app',
     'mathrix.cl',
+    'www.mathrix.cl',
     '35.87.82.233'
     ]
 
