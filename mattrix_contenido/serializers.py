@@ -34,7 +34,7 @@ class NivelesSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Niveles
-        fields = ['id_nivel', 'nombre', 'fondo', 'fondo_tarjeta', 'OA']
+        fields = ['id_nivel', 'nombre', 'descripcion', 'fondo', 'fondo_tarjeta', 'OA']
 
 
 #Etapas

@@ -1,36 +1,39 @@
+from django.db import connection
 from django.contrib.auth.models import User
+from django.http import JsonResponse
 from django.utils import timezone
+from django.views import View
 
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, generics
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import Etapas, AvanceEstudiantes, DocenteEstudiante, RespuestaEscrita
-from .serializers import DocenteEstudianteSerializer, AvanceEstudiantesSerializer, RegistroAvanceEstudiantesSerializer
+from .serializers import DocenteEstudianteSerializer, AvanceEstudiantesSerializer, RegistroAvanceEstudiantesSerializer, RespuestaEscritaSerializer
 
 from mattrix_admin.models import Cursos, Colegio
 from mattrix_usuarios.models import Profile
 from mattrix_admin.serializers import CursosSerializer
-from mattrix_usuarios.serializers import ProfileSerializer, UsuarioSerializer
+from mattrix_usuarios.serializers import ProfileSerializer, DocenteSerializer
 
 ############### LISTAR DOCENTE: PERMITE VER TODOS LOS USUARIOS QUE SON DOCENTES, PARA DESPLEGAR LISTA SELECCIONABLE EN SOLICITAR DOCENTE
 class DocenteViewSet(viewsets.ViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def list(self, request):
         docentes = Profile.objects.filter(rol="teacher")
-        serializer = ProfileSerializer(docentes, many=True)
+        serializer = DocenteSerializer(docentes, many=True)
         return Response(serializer.data)
 
 
 ############### RELACIONAR DOCENTES Y ESTUDIANTES: PARA SOLICITAR DOCENTES, CONFIRMAR ESTUDIANTES Y VER DOCENTES ASIGNADOS
 class DocenteEstudianteViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
-
-    @action(detail=False, methods=['post'], url_path='solicitar_curso')
-    def solicitar_curso(self, request):
+    
+    @action(detail=False, methods=['post'], url_path='solicitar_docente')
+    def solicitar_docente(self, request):
         try:
             estudiante_profile = request.user.profile
         except Profile.DoesNotExist:
@@ -125,44 +128,6 @@ class DocenteEstudianteViewSet(viewsets.ViewSet):
             return Response({"docente_nombre": docente_nombre})
         return Response({"docente_nombre": None})
 
-    @action(detail=False, methods=['post'], url_path='solicitar_docente')
-    def solicitar_docente(self, request):
-        try:
-            estudiante_profile = request.user.profile
-        except Profile.DoesNotExist:
-            return Response({"error": "Perfil de estudiante no encontrado."}, status=status.HTTP_404_NOT_FOUND)
-
-        if estudiante_profile.rol != 'student':
-            return Response({"error": "Solo los estudiantes pueden solicitar un docente."}, status=status.HTTP_403_FORBIDDEN)
-
-        docente_id = request.data.get('docente_id')
-
-        if not docente_id:
-            return Response({"error": "Debe proporcionar el ID del docente."}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            docente_profile = Profile.objects.get(id=docente_id, rol='teacher')
-        except Profile.DoesNotExist:
-            return Response({"error": "Docente no encontrado o no válido."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Verificar si ya existe una solicitud o relación
-        existing_relation = DocenteEstudiante.objects.filter(
-            docente=docente_profile, estudiante=estudiante_profile
-        ).first()
-
-        if existing_relation:
-            return Response({"error": "Ya existe una solicitud o relación con este docente."}, status=status.HTTP_400_BAD_REQUEST)
-
-        data = {
-            'docente': docente_profile.id,
-            'estudiante': estudiante_profile.id,
-        }
-
-        serializer = DocenteEstudianteSerializer(data=data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response({"detail": "Solicitud enviada exitosamente."}, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=False, methods=['get'], url_path='mis_cursos')
     def mis_cursos(self, request):
@@ -215,15 +180,13 @@ class RegistroAvancesEstudianteView(APIView):
         except Etapas.DoesNotExist:
             return Response({"error": "Etapa no encontrada."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Crear o actualizar el avance
-        avance, creado = AvanceEstudiantes.objects.update_or_create(
+        # Crear un nuevo avance
+        avance = AvanceEstudiantes.objects.create(
             estudiante=estudiante,
             etapa=etapa,
-            defaults={
-                "tiempo": tiempo,
-                "logro": logro,
-                "fecha_completada": timezone.now(),
-            }
+            tiempo=tiempo,
+            logro=logro,
+            fecha_completada=timezone.now()
         )
 
         if respuestas:
@@ -234,11 +197,8 @@ class RegistroAvancesEstudianteView(APIView):
                     respuesta=respuesta_data["respuesta"]
                 )
 
+        return Response({"detail": "Avance registrado exitosamente."}, status=status.HTTP_201_CREATED)
 
-        mensaje = "Avance registrado exitosamente." if creado else "Avance actualizado exitosamente."
-        status_code = status.HTTP_201_CREATED if creado else status.HTTP_200_OK
-
-        return Response({"detail": mensaje}, status=status_code)
 
 
 
@@ -300,12 +260,104 @@ class EtapasCompletadasAPIView(APIView):
             return Response({"error": str(e)}, status=400)
 
 
+############ TODAS LAS RESPUESTAS ESCRITAS DADO UN ID_AVANCE: SE USA EN MIS AVANCES
+import json
 
+class RespuestasEscritasPorAvanceAPIView(generics.ListAPIView):
+    permission_classes = [AllowAny]
 
+    def get(self, request, estudiante_id):
+        try:
+            with connection.cursor() as cursor:
+                # Llamar al procedimiento almacenado
+                cursor.callproc('RespuestasEscritasPorEstudiante', [estudiante_id])
+                rows = cursor.fetchall()
 
+                # Procesar los resultados
+                resultados = {}
+                for row in rows:
+                    try:
+                        # Desempaquetar todos los campos devueltos por el procedimiento
+                        id_avance, etapa_id, etapa_nombre, etapa_descripcion, pregunta, respuestas_json = row
+                    except ValueError as ve:
+                        print(f"Error al desempaquetar la fila: {row}, Error: {ve}")
+                        continue  # Continuar con la siguiente fila
 
+                    try:
+                        # Deserializar la cadena JSON a una lista de Python
+                        respuestas_lista = json.loads(respuestas_json)
+                    except json.JSONDecodeError as e: 
+                        print(f"Error al deserializar respuestas_json: {respuestas_json}, Error: {e}")
+                        respuestas_lista = []
 
-# Estadísticas para docentes
+                    # Crear una clave única para la etapa basada en nombre y descripción
+                    clave_etapa = (etapa_nombre, etapa_descripcion)
+
+                    # Inicializar el diccionario para una nueva etapa si es necesario
+                    if clave_etapa not in resultados:
+                        resultados[clave_etapa] = {
+                            'etapa_nombre': etapa_nombre,
+                            'etapa_descripcion': etapa_descripcion,
+                            'preguntas': {}
+                        }
+
+                    # Inicializar la lista de respuestas para una nueva pregunta si es necesario
+                    if pregunta not in resultados[clave_etapa]['preguntas']:
+                        resultados[clave_etapa]['preguntas'][pregunta] = []
+
+                    # Añadir las respuestas a la pregunta correspondiente
+                    resultados[clave_etapa]['preguntas'][pregunta].extend(respuestas_lista)
+
+                # Convertir el diccionario a una lista para mayor compatibilidad
+                respuesta_final = []
+                for (etapa_nombre, etapa_descripcion), datos in resultados.items():
+                    respuesta_final.append({
+                        'etapa_nombre': etapa_nombre,
+                        'etapa_descripcion': etapa_descripcion,
+                        'preguntas': datos['preguntas']
+                    })
+
+                return JsonResponse(respuesta_final, safe=False)
+
+        except Exception as e:
+            # Registrar el error detalladamente
+            import traceback
+            traceback.print_exc()
+            return JsonResponse({'error': 'Error interno del servidor.', 'detalle': str(e)}, status=500)
+
+########### PROGRESIÓN HISTÓRICA DE LAS HABILIDADES POR ESTUDIANTES: SE USA EN MIS AVANCES
+
+class ObtenerProgresoHabilidadView(View):
+    def get(self, request):
+        tipo = request.GET.get('tipo', 'General')
+        habilidad = request.GET.get('habilidad', 'Conocer')
+
+        # Validar parámetros
+        if tipo not in ['General', 'Matematica']:
+            return JsonResponse({'error': 'Tipo de habilidad inválido.'}, status=400)
+
+        try:
+            with connection.cursor() as cursor:
+                cursor.callproc('SP_ObtenerProgresoHabilidad', [tipo, habilidad])
+                rows = cursor.fetchall()
+
+            # Transformar los resultados en una lista de diccionarios
+            data = []
+            for row in rows:
+                if len(row) != 2:
+                    continue  # O maneja el error según sea necesario
+                FechaEtapa, NivelLogro, NombreEtapa = row
+                data.append({
+                    "FechaEtapa": FechaEtapa.isoformat() if FechaEtapa else None,
+                    "NivelLogro": NivelLogro,
+                    "NombreEtapa": NombreEtapa
+                })
+
+            return JsonResponse(data, safe=False)
+        except Exception as e:
+            return JsonResponse({'error': 'Error interno del servidor.'}, status=500)
+
+########### LAS ESTADÍSTICAS POR ESTUDIANTE
 class EstadisticaEstudianteViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
 
@@ -319,79 +371,167 @@ class EstadisticaEstudianteViewSet(viewsets.ViewSet):
         if docente_profile.rol != 'teacher':
             return Response({"error": "Acceso no autorizado."}, status=status.HTTP_403_FORBIDDEN)
 
-        # Obtener las relaciones confirmadas del docente
-        relaciones = DocenteEstudiante.objects.filter(docente=docente_profile, confirmado=True)
+        try:
+            # Consulta SQL directa
+            with connection.cursor() as cursor:
+                query = """
+                SELECT DISTINCT c.id_curso, c.nivel, c.letra, col.nombre AS colegio_nombre
+                FROM mattrix_docentes_docenteestudiante de
+                INNER JOIN mattrix_usuarios_profile p ON de.estudiante_id = p.id
+                INNER JOIN mattrix_admin_cursos c ON p.curso_id = c.id_curso
+                INNER JOIN mattrix_admin_colegio col ON c.colegio_id = col.id_colegio
+                WHERE de.docente_id = %s AND de.confirmado = TRUE
+                ORDER BY col.nombre, c.nivel, c.letra;
+                """
+                cursor.execute(query, [docente_profile.id])
+                cursos = cursor.fetchall()
 
-        # Obtener los estudiantes de esas relaciones
-        estudiantes = [rel.estudiante for rel in relaciones]
+            # Agrupar los resultados por colegio
+            colegios_data = {}
+            for row in cursos:
+                colegio_nombre = row[3]
+                curso_data = {
+                    "id_curso": row[0],
+                    "nivel": row[1],
+                    "letra": row[2]
+                }
+                if colegio_nombre not in colegios_data:
+                    colegios_data[colegio_nombre] = []
+                colegios_data[colegio_nombre].append(curso_data)
 
-        # Obtener los cursos únicos de esos estudiantes
-        cursos_ids = set(est.curso.id for est in estudiantes if est.curso)
-        cursos = Cursos.objects.filter(id__in=cursos_ids)
+            # Formatear los datos agrupados
+            resultados_agrupados = [
+                {"colegio": colegio, "cursos": cursos}
+                for colegio, cursos in colegios_data.items()
+            ]
 
-        serializer = CursosSerializer(cursos, many=True)
-        return Response(serializer.data)
+            return Response(resultados_agrupados)
 
-    @action(detail=False, methods=['get'], url_path='mis_estudiantes')
+        except Exception as e:
+            print(f"Error en la consulta SQL: {str(e)}")
+            return Response({"error": "Error interno del servidor."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+    @action(detail=False, methods=["get"], url_path="mis_estudiantes")
     def mis_estudiantes(self, request):
         try:
             docente_profile = request.user.profile
         except Profile.DoesNotExist:
             return Response({"error": "Perfil de usuario no encontrado."}, status=status.HTTP_404_NOT_FOUND)
 
-        if docente_profile.rol != 'teacher':
+        if docente_profile.rol != "teacher":
             return Response({"error": "Acceso no autorizado."}, status=status.HTTP_403_FORBIDDEN)
 
-        # Obtener las relaciones confirmadas del docente
-        relaciones = DocenteEstudiante.objects.filter(docente=docente_profile, confirmado=True)
+        try:
+            # Llamar al procedimiento almacenado
+            with connection.cursor() as cursor:
+                cursor.callproc("ObtenerEstudiantesPorCurso", [docente_profile.id])
+                resultados = cursor.fetchall()
 
-        # Agrupar estudiantes por curso
-        estudiantes_por_curso = {}
-        for relacion in relaciones:
-            estudiante = relacion.estudiante
-            curso = estudiante.curso.nombre if estudiante.curso else 'Sin Curso'
-            if curso not in estudiantes_por_curso:
-                estudiantes_por_curso[curso] = []
-            estudiantes_por_curso[curso].append({
-                'id': estudiante.id,
-                'nombre': f"{estudiante.user.first_name} {estudiante.user.last_name}",
-                'rut': estudiante.rut,
-                # Añade otros campos si es necesario
-            })
+            # Agrupar resultados por curso
+            estudiantes_por_curso = {}
+            for row in resultados:
+                curso = row[0] if row[0] else "Sin Curso"
+                estudiante_data = {
+                    "id": row[1],
+                    "nombre": row[2],
+                    "rut": row[3],
+                }
+                if curso not in estudiantes_por_curso:
+                    estudiantes_por_curso[curso] = []
+                estudiantes_por_curso[curso].append(estudiante_data)
 
-        return Response(estudiantes_por_curso)
-    
+            return Response(estudiantes_por_curso)
+
+        except Exception as e:
+            print(f"Error al llamar al procedimiento almacenado: {str(e)}")
+            return Response({"error": "Error interno del servidor."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+
     @action(detail=False, methods=["get"])
     def avances(self, request):
         estudiante_id = request.query_params.get("estudiante_id")
-        if estudiante_id:
-            try:
-                estudiante_id = int(estudiante_id)
-            except ValueError:
-                return Response({"error": "Estudiante ID inválido."}, status=status.HTTP_400_BAD_REQUEST)
+        if not estudiante_id:
+            return Response({"error": "Estudiante ID no proporcionado."}, status=status.HTTP_400_BAD_REQUEST)
 
-            docente_profile = request.user.profile
+        try:
+            estudiante_id = int(estudiante_id)
+        except ValueError:
+            return Response({"error": "Estudiante ID inválido."}, status=status.HTTP_400_BAD_REQUEST)
 
-            if docente_profile.rol != 'teacher':
-                return Response({"error": "Acceso no autorizado."}, status=status.HTTP_403_FORBIDDEN)
+        docente_profile = request.user.profile
 
-            try:
-                estudiante_profile = Profile.objects.get(id=estudiante_id, rol='student')
-            except Profile.DoesNotExist:
-                return Response({"error": "Estudiante no encontrado."}, status=status.HTTP_404_NOT_FOUND)
+        if docente_profile.rol != 'teacher':
+            return Response({"error": "Acceso no autorizado."}, status=status.HTTP_403_FORBIDDEN)
 
-            # Verificar que el estudiante está relacionado con el docente
-            try:
-                DocenteEstudiante.objects.get(docente=docente_profile, estudiante=estudiante_profile, confirmado=True)
-            except DocenteEstudiante.DoesNotExist:
-                return Response({"error": "No tiene permiso para acceder a este estudiante."}, status=status.HTTP_403_FORBIDDEN)
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT user_id 
+                    FROM mattrix_usuarios_profile 
+                    WHERE id = %s;
+                """, [estudiante_id])
+                user_id_encontrado = cursor.fetchone()
 
-            avances = AvanceEstudiantes.objects.filter(estudiante=estudiante_profile.user).select_related(
-                'etapa__id_nivel', 'etapa__OA', 'etapa__dificultad', 'etapa__habilidad'
-            )
-            serializer = AvanceEstudiantesSerializer(avances, many=True)
-            return Response(serializer.data)
-        return Response({"error": "Estudiante ID no proporcionado"}, status=status.HTTP_400_BAD_REQUEST)
+            if not user_id_encontrado:
+                return Response({"error": "No se encontró el user_id para el estudiante."}, status=status.HTTP_404_NOT_FOUND)
+
+            user_id = user_id_encontrado[0]
+            
+            with connection.cursor() as cursor:
+                cursor.callproc('ObtenerAvancesEstudiante', [user_id])
+
+                # Obtener el detalle de los avances
+                resultados_detalle = cursor.fetchall()
+
+                # Cambiar al siguiente conjunto de resultados
+                cursor.nextset()
+                resultados_logro_oa = cursor.fetchall()
+
+                cursor.nextset()
+                resultados_logro_dificultad = cursor.fetchall()
+
+                cursor.nextset()
+                resultados_habilidades_matematica = cursor.fetchall()
+
+                cursor.nextset()
+                resultados_habilidades_bloom = cursor.fetchall()
+
+            # Formatear los resultados en un formato JSON
+            detalle = [
+                {
+                    "etapa": row[0],
+                    "objetivo_aprendizaje": row[1],
+                    "nivel": row[2],
+                    "habilidad_matematica": row[3],
+                    "habilidad_bloom": row[4],
+                    "dificultad": row[5],
+                    "logro": row[6],
+                    "tiempo": row[7],
+                }
+                for row in resultados_detalle
+            ]
+
+            logro_oa = [{"objetivo_aprendizaje": row[0], "promedio_logro": row[1]} for row in resultados_logro_oa]
+
+            logro_dificultad = [{"dificultad": row[0], "promedio_logro": row[1]} for row in resultados_logro_dificultad]
+
+            habilidades_matematica = [{"habilidad": row[0], "cantidad": row[1]} for row in resultados_habilidades_matematica]
+
+            habilidades_bloom = [{"habilidad": row[0], "cantidad": row[1]} for row in resultados_habilidades_bloom]
+
+            return Response({
+                "detalle": detalle,
+                "logro_oa": logro_oa,
+                "logro_dificultad": logro_dificultad,
+                "habilidades_matematica": habilidades_matematica,
+                "habilidades_bloom": habilidades_bloom,
+            })
+
+        except Exception as e:
+            return Response({"error": f"Error al ejecutar el procedimiento almacenado: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 
     @action(detail=False, methods=['get'], url_path='curso/estadisticas')
     def estadisticas_curso(self, request):
@@ -428,53 +568,101 @@ class EstadisticaEstudianteViewSet(viewsets.ViewSet):
         return Response({"error": "Curso ID no proporcionado"}, status=status.HTTP_400_BAD_REQUEST)
 
 
-
-# Vista para obtener todos los avances de los estudiantes de un docente
-class AvancesEstudiantesDocenteView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        try:
-            docente_profile = request.user.profile
-        except Profile.DoesNotExist:
-            return Response({"error": "Perfil de usuario no encontrado."}, status=status.HTTP_404_NOT_FOUND)
-
-        if docente_profile.rol != 'teacher':
-            return Response({"error": "Acceso no autorizado. Solo los docentes pueden acceder a esta información."}, status=status.HTTP_403_FORBIDDEN)
-
-        # Obtener los estudiantes asociados al docente
-        relaciones = DocenteEstudiante.objects.filter(docente=docente_profile, confirmado=True)
-        estudiantes = [relacion.estudiante.user for relacion in relaciones]
-
-        # Filtrar avances por los estudiantes asociados
-        avances = AvanceEstudiantes.objects.filter(estudiante__in=estudiantes)
-        serializer = AvanceEstudiantesSerializer(avances, many=True)
-        return Response(serializer.data)
+    
 
 ############### MIS AVANCES: PERMITE VER TODAS LAS ETAPAS COMPLETADAS DEL ESTUDIANTE PARA VERLOS EN MIS AVANCES
 class EtapasCompletadasAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
-    def get(self, request, id_usuario):
+    def get(self, request, id_usuario, *args, **kwargs):
         try:
-            avances = AvanceEstudiantes.objects.filter(estudiante_id=id_usuario, logro__gt=0)  # Logro > 0 asegura que están completadas
-            etapas = avances.select_related('etapa')  # Optimiza las consultas
-            data = []
+            with connection.cursor() as cursor:
+                # Llamar al procedimiento almacenado
+                cursor.callproc("ObtenerEstadisticasPorEstudiante", [id_usuario])
 
-            for avance in etapas:
-                etapa = avance.etapa
-                data.append({
-                    "id_etapa": etapa.id_etapa,
-                    "nombre": etapa.nombre,
-                    "dificultad": etapa.dificultad,
-                    "habilidad_matematica": etapa.habilidad_matematica,
-                    "habilidad_bloom": etapa.habilidad_bloom,
-                    "tiempo": avance.tiempo,
-                    "logro": avance.logro,
-                    "fecha_completada": avance.fecha_completada,
-                })
+                # Obtener los resultados de ambas consultas
+                datos_consolidados = cursor.fetchall()
+                cursor.nextset()  # Cambiar al siguiente conjunto de resultados
+                detalles_registros = cursor.fetchall()
 
-            return Response(data, status=200)
-
+                # Formatear los resultados
+                resultados = {
+                    "datos_consolidados": [
+                        {
+                            "nombre_etapa": fila[0],
+                            "descripcion_etapa": fila[1],
+                            "promedio_logro": fila[2],
+                            "tiempo_total": fila[3],
+                            "cantidad_registros": fila[4]
+                        } for fila in datos_consolidados
+                    ],
+                    "detalles_registros": [
+                        {
+                            "nombre_etapa": fila[0],
+                            "porcentaje_logro": fila[1],
+                            "tiempo_destinado": fila[2]
+                        } for fila in detalles_registros
+                    ]
+                }
+            return JsonResponse(resultados, safe=False, status=200)
         except Exception as e:
-            return Response({"error": str(e)}, status=400)
+            return JsonResponse({"error": str(e)}, status=500)
+
+
+############ NOMBRE USUARIO Y AVATAR PARA EL MAINDOCENTE
+
+class DatosDocenteViewSet(viewsets.ViewSet):
+    permission_classes = [IsAuthenticated]
+    
+    @action(detail=False, methods=["get"], url_path="saludo")
+    def obtener_saludo(self, request):
+        """
+        Obtiene el saludo del docente autenticado.
+        """
+        docente_id = request.user.profile.id
+        try:
+            with connection.cursor() as cursor:
+                cursor.callproc("ObtenerSaludoDocente", [docente_id])
+                resultado = cursor.fetchone()
+            if resultado:
+                return Response({
+                    "username": resultado[0],
+                    "avatar": resultado[1]
+                })
+            return Response({"error": "Docente no encontrado."}, status=404)
+        except Exception as e:
+            print(f"Error: {str(e)}")
+            return Response({"error": "Error interno del servidor."}, status=500)
+
+    @action(detail=False, methods=["get"], url_path="avatares")
+    def obtener_avatares(self, request):
+        """
+        Obtiene todos los avatares disponibles para el docente.
+        """
+        try:
+            with connection.cursor() as cursor:
+                cursor.callproc("ObtenerAvataresDocente")
+                resultados = cursor.fetchall()
+            avatares = [{"id": row[0], "imagen": row[1]} for row in resultados]
+            return Response(avatares)
+        except Exception as e:
+            print(f"Error: {str(e)}")
+            return Response({"error": "Error interno del servidor."}, status=500)
+
+    @action(detail=False, methods=["post"], url_path="actualizar-avatar")
+    def actualizar_avatar(self, request):
+        """
+        Actualiza el avatar del docente autenticado.
+        """
+        docente_id = request.user.profile.id
+        avatar_id = request.data.get("avatar_id")
+        if not avatar_id:
+            return Response({"error": "El ID del avatar es obligatorio."}, status=400)
+
+        try:
+            with connection.cursor() as cursor:
+                cursor.callproc("ActualizarAvatarDocente", [docente_id, avatar_id])
+            return Response({"mensaje": "Avatar actualizado correctamente."})
+        except Exception as e:
+            print(f"Error: {str(e)}")
+            return Response({"error": "Error interno del servidor."}, status=500)

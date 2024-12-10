@@ -27,7 +27,6 @@ class DocenteEstudiante(models.Model):
         return f"Docente: {self.docente.user.username} - Estudiante: {self.estudiante.user.username} - Confirmado: {self.confirmado}"
 
 
-
 #####################       ESTADÍSTICAS ESTUDIANTES      #####################
 
 class AvanceEstudiantes(models.Model):

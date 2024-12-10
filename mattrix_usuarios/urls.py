@@ -9,7 +9,7 @@ from drf_yasg import openapi
 
 from . import views
 
-from .views import UsuariosListView, UsuarioCreateView, DetalleUsuarioView, ObtenerUsuarioAPIView, ListaAvatarsAPIView, ActualizarAvatarView, CustomTokenObtainPairView
+from .views import DatosEstudianteView, UsuariosListView, UsuarioCreateView, DetalleUsuarioView, ObtenerUsuarioAPIView, ListaAvatarsAPIView, ActualizarAvatarView, CustomTokenObtainPairView
 
 ###################### FIN IMPORTACIONES ########################
 schema_view = get_schema_view(
@@ -34,9 +34,12 @@ urlpatterns = [
     
     path("token/", CustomTokenObtainPairView.as_view(), name="get_token"),
     path("token/refresh/", TokenRefreshView.as_view(), name="refresh"),#permite que usuarios permanezcan autenticados, renovando sesión con el refresh token
+    	
+    path('usuarios/datos-estudiantes/', DatosEstudianteView.as_view(), name='datos-estudiantes'),
 
     path('usuarios/avatars/', ListaAvatarsAPIView.as_view(), name='lista_avatars'),
     path('usuarios/actualizar-avatar/', ActualizarAvatarView.as_view(), name='actualizar-avatar'),
+
 
    
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),

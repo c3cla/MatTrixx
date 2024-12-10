@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Servidor: 127.0.0.1
--- Tiempo de generación: 04-12-2024 a las 15:01:48
+-- Tiempo de generación: 10-12-2024 a las 22:33:35
 -- Versión del servidor: 11.6.2-MariaDB
 -- Versión de PHP: 8.0.30
 
@@ -20,6 +20,274 @@ SET time_zone = "+00:00";
 --
 -- Base de datos: `backend_mattrix`
 --
+
+DELIMITER $$
+--
+-- Procedimientos
+--
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ActualizarAvatarDocente` (IN `docente_id` INT, IN `avatar_id` INT)   BEGIN
+    UPDATE mattrix_usuarios_profile
+    SET avatarUser_id = avatar_id
+    WHERE id = docente_id;
+END$$
+
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ObtenerAvancesEstudiante` (IN `user_id` INT)   BEGIN
+    -- Detalle de los avances
+    SELECT 
+        et.nombre AS etapa,
+        oa.OA AS objetivo_aprendizaje,
+        n.nombre AS nivel,
+        et.habilidad_matematica,
+        et.habilidad_bloom,
+        et.dificultad,
+        a.logro,
+        a.tiempo
+    FROM 
+        mattrix_docentes_avanceestudiantes a
+    INNER JOIN 
+        mattrix_contenido_etapas et ON a.etapa_id = et.id_etapa
+    INNER JOIN 
+        mattrix_contenido_niveles n ON et.id_nivel_id = n.id_nivel
+    INNER JOIN 
+        mattrix_contenido_oa oa ON et.OA_id = oa.id_OA
+    INNER JOIN 
+        auth_user u ON a.estudiante_id = u.id  -- Cambio aquí para usar user.id
+    WHERE 
+        u.id = user_id;
+
+    -- Logro promedio por Objetivo de Aprendizaje
+    SELECT 
+        oa.OA AS objetivo_aprendizaje,
+        ROUND(AVG(a.logro), 0) AS promedio_logro
+    FROM 
+        mattrix_docentes_avanceestudiantes a
+    INNER JOIN 
+        mattrix_contenido_etapas et ON a.etapa_id = et.id_etapa
+    INNER JOIN 
+        mattrix_contenido_oa oa ON et.OA_id = oa.id_OA
+    INNER JOIN 
+        auth_user u ON a.estudiante_id = u.id  -- Cambio aquí para usar user.id
+    WHERE 
+        u.id = user_id
+    GROUP BY 
+        oa.id_OA;
+
+    -- Logro promedio por dificultad
+    SELECT 
+        et.dificultad,
+        ROUND(AVG(a.logro), 0) AS promedio_logro
+    FROM 
+        mattrix_docentes_avanceestudiantes a
+    INNER JOIN 
+        mattrix_contenido_etapas et ON a.etapa_id = et.id_etapa
+    INNER JOIN 
+        auth_user u ON a.estudiante_id = u.id  -- Cambio aquí para usar user.id
+    WHERE 
+        u.id = user_id
+    GROUP BY 
+        et.dificultad;
+
+    -- Distribución de habilidades matemáticas
+    SELECT 
+        et.habilidad_matematica AS habilidad,
+        COUNT(*) AS cantidad
+    FROM 
+        mattrix_docentes_avanceestudiantes a
+    INNER JOIN 
+        mattrix_contenido_etapas et ON a.etapa_id = et.id_etapa
+    INNER JOIN 
+        auth_user u ON a.estudiante_id = u.id  -- Cambio aquí para usar user.id
+    WHERE 
+        u.id = user_id
+    GROUP BY 
+        et.habilidad_matematica;
+
+    -- Distribución de habilidades de Bloom
+    SELECT 
+        et.habilidad_bloom AS habilidad,
+        COUNT(*) AS cantidad
+    FROM 
+        mattrix_docentes_avanceestudiantes a
+    INNER JOIN 
+        mattrix_contenido_etapas et ON a.etapa_id = et.id_etapa
+    INNER JOIN 
+        auth_user u ON a.estudiante_id = u.id  -- Cambio aquí para usar user.id
+    WHERE 
+        u.id = user_id
+    GROUP BY 
+        et.habilidad_bloom;
+END$$
+
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ObtenerAvataresDocente` ()   BEGIN
+    SELECT id_imagen, imagen
+    FROM mattrix_usuarios_imagenes
+    WHERE uso = 'avatarDocente';
+END$$
+
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ObtenerAvatarEstudiante` (IN `p_avatar_usuario` INT, OUT `p_imagen` VARCHAR(255))   BEGIN
+    SELECT 
+        imagen
+    INTO 
+        p_imagen
+    FROM 
+        mattrix_usuarios_imagenes
+    WHERE 
+        id_imagen = p_avatar_usuario;
+
+    -- Si no se encuentra una coincidencia, devolver una imagen genérica
+    IF p_imagen IS NULL THEN
+        SET p_imagen = 'avatars/avatar_1.png';
+    END IF;
+END$$
+
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ObtenerDatosEstudiante` (IN `user_id` INT, OUT `nombre_completo` VARCHAR(255), OUT `id_usuario` INT, OUT `avatar_usuario` VARCHAR(255))   BEGIN
+    SELECT 
+        CONCAT(auth_user.first_name, ' ', auth_user.last_name) AS nombre_completo,
+        auth_user.id AS id_usuario,
+        mattrix_usuarios_profile.avatarUser_id AS avatar_usuario
+    INTO 
+        nombre_completo, id_usuario, avatar_usuario
+    FROM 
+        auth_user
+    INNER JOIN 
+        mattrix_usuarios_profile ON auth_user.id = mattrix_usuarios_profile.user_id
+    WHERE 
+        auth_user.id = user_id;
+END$$
+
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ObtenerEstadisticasPorEstudiante` (IN `id_estudiante` INT)   BEGIN
+    -- Promedio por etapa
+    SELECT     	
+        et.nombre AS NombreEtapa,
+        et.descripcion AS DescripcionEtapa,
+        ROUND(AVG(ae.logro),0) AS PromedioPorcentajeLogro,
+        SUM(ae.tiempo) AS TiempoTotalDestinado,
+        COUNT(ae.etapa_id) AS CantidadRegistros
+    FROM 
+        mattrix_docentes_avanceestudiantes ae
+    INNER JOIN 
+        mattrix_contenido_etapas et ON ae.etapa_id = et.id_etapa
+    WHERE 
+        ae.estudiante_id = id_estudiante
+    GROUP BY 
+        ae.etapa_id;
+
+    -- Detalle por etapa
+    SELECT 
+        et.nombre AS NombreEtapa,
+        ae.logro AS PorcentajeLogro,
+        ae.tiempo AS TiempoDestinado
+    FROM 
+        mattrix_docentes_avanceestudiantes ae
+    INNER JOIN 
+        mattrix_contenido_etapas et ON ae.etapa_id = et.id_etapa
+    WHERE 
+        ae.estudiante_id = id_estudiante;
+END$$
+
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ObtenerEstudiantesPorCurso` (IN `docente_id` INT)   BEGIN
+    SELECT 
+        CONCAT(c.nivel, ' ', c.letra) AS curso_nombre,
+        e.id AS estudiante_id, 
+        CONCAT(u.first_name, ' ', u.last_name) AS estudiante_nombre, 
+        e.rut AS estudiante_rut
+    FROM mattrix_docentes_docenteestudiante de
+    INNER JOIN mattrix_usuarios_profile e ON de.estudiante_id = e.id
+    INNER JOIN auth_user u ON e.user_id = u.id
+    LEFT JOIN mattrix_admin_cursos c ON e.curso_id = c.id_curso
+    WHERE de.docente_id = docente_id AND de.confirmado = TRUE
+    ORDER BY curso_nombre;
+END$$
+
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ObtenerProgresoHabilidad` (IN `TipoHabilidad` VARCHAR(100), IN `Habilidad` VARCHAR(100))   BEGIN
+    IF TipoHabilidad = 'General' THEN
+        SELECT 
+            a.fecha_completada AS FechaEtapa, 
+            a.logro AS NivelLogro
+        FROM mattrix_docentes_avanceestudiantes a
+        INNER JOIN mattrix_contenido_etapas e ON a.etapa_id = e.id_etapa
+        WHERE e.habilidad_bloom = Habilidad
+        ORDER BY a.fecha_completada ASC;
+    ELSEIF TipoHabilidad = 'Matematica' THEN
+        SELECT 
+            a.fecha_completada AS FechaEtapa, 
+            a.logro AS NivelLogro
+        FROM mattrix_docentes_avanceestudiantes a
+        INNER JOIN mattrix_contenido_etapas e ON a.etapa_id = e.id_etapa
+        WHERE e.habilidad_matematica = Habilidad
+        ORDER BY a.fecha_completada ASC;
+    END IF;
+END$$
+
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ObtenerSaludoDocente` (IN `docente_id` INT)   BEGIN
+    SELECT 
+        u.username AS nombre_usuario, 
+        i.imagen AS avatar
+    FROM auth_user u
+    INNER JOIN mattrix_usuarios_profile p ON u.id = p.user_id
+    LEFT JOIN mattrix_usuarios_imagenes i ON i.id_imagen = p.avatarUser_id
+    WHERE p.id = docente_id;
+END$$
+
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ObtenerUserIdDesdeEstudianteId` (IN `estudianteId` INT, OUT `userId` INT)   BEGIN
+    SELECT u.id INTO userId
+    FROM auth_user u
+    INNER JOIN mattrix_usuarios_profile p ON u.id = p.user_id
+    WHERE p.id = estudianteId;
+END$$
+
+CREATE DEFINER=`root`@`localhost` PROCEDURE `RespuestasEscritasPorEstudiante` (IN `estudiante_id` INT)   BEGIN
+    SELECT 
+        a.id_avance,
+        a.etapa_id,
+        e.nombre AS etapa_nombre,
+        e.descripcion AS etapa_descripcion,
+        r.pregunta,
+        JSON_ARRAYAGG(
+            JSON_OBJECT(
+                'respuesta', r.respuesta,
+                'retroalimentacion', r.retroalimentacion
+            )
+        ) AS respuestas
+    FROM 
+        mattrix_docentes_avanceestudiantes a
+    INNER JOIN 
+        mattrix_docentes_respuestaescrita r ON a.id_avance = r.avance_id
+    INNER JOIN
+        mattrix_contenido_etapas e ON a.etapa_id = e.id_etapa
+    WHERE 
+        a.estudiante_id = estudiante_id
+    GROUP BY 
+        a.id_avance, 
+        a.etapa_id, 
+        e.nombre, 
+        e.descripcion, 
+        r.pregunta;
+END$$
+
+CREATE DEFINER=`root`@`localhost` PROCEDURE `SP_ObtenerProgresoHabilidad` (IN `TipoHabilidad` VARCHAR(100), IN `Habilidad` VARCHAR(100))   BEGIN
+    IF TipoHabilidad = 'General' THEN
+        SELECT 
+            a.fecha_completada AS FechaEtapa, 
+            a.logro AS NivelLogro,
+            e.nombre AS NombreEtapa
+        FROM mattrix_docentes_avanceestudiantes a
+        INNER JOIN mattrix_contenido_etapas e ON a.etapa_id = e.id_etapa
+        WHERE e.habilidad_bloom = Habilidad
+        ORDER BY a.fecha_completada ASC;
+    ELSEIF TipoHabilidad = 'Matematica' THEN
+        SELECT 
+            a.fecha_completada AS FechaEtapa, 
+            a.logro AS NivelLogro,
+            e.nombre AS NombreEtapa
+        FROM mattrix_docentes_avanceestudiantes a
+        INNER JOIN mattrix_contenido_etapas e ON a.etapa_id = e.id_etapa
+        WHERE e.habilidad_matematica = Habilidad
+        ORDER BY a.fecha_completada ASC;
+    END IF;
+END$$
+
+DELIMITER ;
 
 -- --------------------------------------------------------
 
@@ -168,39 +436,9 @@ CREATE TABLE `auth_user` (
 --
 
 INSERT INTO `auth_user` (`id`, `password`, `last_login`, `is_superuser`, `username`, `first_name`, `last_name`, `email`, `is_staff`, `is_active`, `date_joined`) VALUES
-(35, 'pbkdf2_sha256$870000$455EHeWPTkCieEjWVIGxtE$bXmrvll+E+vOopop3nXwiICJzxjqRrOrDKLbCHfxOhY=', '2024-12-04 05:04:57.863525', 1, 'Clau', '', '', 'c@gmail.com', 1, 1, '2024-12-04 05:04:33.986866'),
-(36, '', NULL, 0, 'Clau2', 'Claudia', 'Videla', 'c@gmail.cl', 0, 1, '2024-12-04 06:02:05.360280'),
-(37, '', NULL, 0, 'Clau3', 'Claudia', 'Videla', 'c@gmail.cl', 0, 1, '2024-12-04 06:05:57.180711'),
-(38, 'pbkdf2_sha256$870000$QqkfWID0j8zzgmz68KhZ7g$lFGDbdUdGGtk/VzHdDQqLT1m0hAEO/iw63YXbsId2s4=', NULL, 0, 'Clau4', 'Claudia', 'Videla', 'c@gmail.cl', 0, 1, '2024-12-04 06:11:47.610259'),
-(39, 'pbkdf2_sha256$870000$JL7gti4nmmjuvdJNbGaYdt$W4y3xoyhDhGy6R2umLGD/8N5RB5oN07r8QHvVfoQ9kw=', NULL, 0, 'Clau5', 'Claudia', 'Videla', 'c@gmail.cl', 0, 1, '2024-12-04 06:13:49.236055'),
-(40, 'pbkdf2_sha256$870000$EbUGVzWe3JiwRmnx2OLnRe$p6j39g+PwMpSGwBkJsMq4moyT3dXC0Z0Wdgt1X64bzA=', NULL, 0, 'Clau6', 'Claudia', 'Videla', 'c@gmail.cl', 0, 1, '2024-12-04 06:16:20.915750'),
-(41, 'pbkdf2_sha256$870000$ZAJHkVk1R8T4nAMd6HQIbD$epIHZggBVIi+GQ5POHAPX8pb5fkrVMUYTG0RAJPVVoI=', NULL, 0, 'sy', 'string', 'string', 'user@example.com', 0, 1, '2024-12-04 06:20:42.328732'),
-(42, 'pbkdf2_sha256$870000$Lx2KgUkIVlc2Wd31PEK3cf$zNa7Sxulq4tU5t6TPk3M4SnaS21hF8vi4TLmz0XqRw4=', NULL, 0, 'ssy', 'string', 'string', 'user@example.com', 0, 1, '2024-12-04 06:21:09.730435'),
-(44, 'pbkdf2_sha256$870000$rfWHwl3IGpszS1jQVQR0uc$Bg1uJ5hAZ6rO2Z1f/MjTTnSMyaG1A48OSlvu0EGFjwY=', NULL, 0, 'Clau8', 'Claudia', 'Videla', 'c@gmail.cl', 0, 1, '2024-12-04 06:22:25.233584'),
-(45, 'pbkdf2_sha256$870000$ZTKl1hRTK8b1SCApIRdsc8$UmULGx3a6V9UM2FhWMRq77Yar5ZbIYgpkyk9HMbW4/w=', NULL, 0, 'Clau9', 'Claudia', 'Videla', 'c@gmail.cl', 0, 1, '2024-12-04 06:23:13.531705'),
-(46, 'pbkdf2_sha256$870000$iRpVDYldygsfxcXbrrfPj1$tbDVzalHH6/pGZidBCRUJ6l+RYP4m6sMhxmNLyHQNng=', NULL, 0, 'Clau10', 'Claudia', 'Videla', 'c@gmail.cl', 0, 1, '2024-12-04 06:29:47.623968'),
-(47, 'pbkdf2_sha256$870000$Lk681EPbbk28TlVUgFKtCL$LcLqIow+GTraUQXtkyFSIwl06ivn1xfLXb6DlpCjH74=', NULL, 0, 'Clau11', 'Claudia', 'Videla', 'c@gmail.cl', 0, 1, '2024-12-04 06:43:12.008618'),
-(48, 'pbkdf2_sha256$870000$Ml8IPo7DOcpAQX7r4Vjgen$kEct7wEWr22d3+5lCufpVyWyGj6+byLwqDE8wIef30I=', NULL, 0, 'Clau12', 'Claudia', 'Videla', 'c@gmail.cl', 0, 1, '2024-12-04 06:44:31.034134'),
-(49, 'pbkdf2_sha256$870000$9zPuQRyO30hVr3axXXnsB1$Daj+WJeYWuX3oB/+BSUKHD6MBMmbAjlmGvbM6nZdQyY=', NULL, 0, 'Clau13', 'Claudia', 'Videla', 'c@gmail.cl', 0, 1, '2024-12-04 06:46:05.805751'),
-(50, 'pbkdf2_sha256$870000$gG9NLK5M9JOmCMkYEBvUvm$GjOVlq/qBXKfrU5nmc/WNeVvb8sSRj4fmcAHmIVKO6c=', NULL, 0, 'Clau14', 'Claudia', 'Videla', 'c@gmail.cl', 0, 1, '2024-12-04 06:47:02.129245'),
-(51, 'pbkdf2_sha256$870000$Z0IwykMDGgTu90eWwMvBDN$CfsRR07pKAYrTZ2N+g4QPUOWbAn/jL/c7T08fqe8TkI=', NULL, 0, 'Clau15', 'Claudia', 'Videla', 'c@gmail.cl', 0, 1, '2024-12-04 06:48:16.392718'),
-(52, 'pbkdf2_sha256$870000$8Ao02ymVbVoGxoy8uGC8pJ$ZCEXWv5tFh8wr1ihgfz6Ks4LV4Hjx2l7wj1aUVkv32I=', NULL, 0, 'Clau16', 'Claudia', 'Videla', 'c@gmail.cl', 0, 1, '2024-12-04 06:49:13.432417'),
-(53, 'pbkdf2_sha256$870000$wMKn00zk5XGi2SyUtCt3pP$qKPRz1hYNAbIUXXYU4JzH6gNN9Wi9/YXBnxA5MIaqIQ=', NULL, 0, 'Clau17', 'Claudia', 'Videla', 'c@gmail.cl', 0, 1, '2024-12-04 06:51:51.391199'),
-(54, 'pbkdf2_sha256$870000$K5ppd1IawDJOupbb0oRsdR$OSzMoPGcCmU7jtnyYK2o55JYefa1z3QB75FzlmIDieQ=', NULL, 0, 'Clau18', 'Claudia', 'Videla', 'c@gmail.cl', 0, 1, '2024-12-04 06:53:47.851617'),
-(55, 'pbkdf2_sha256$870000$IxxSPceQNtt3UpzkQ0rauY$bMVmmpraDgL/CCIGes2rvA9OGNbpFr4bm8z3zJSwQ0g=', NULL, 0, 'Clau19', 'Claudia', 'Videla', 'c@gmail.cl', 0, 1, '2024-12-04 06:55:34.080281'),
-(56, 'pbkdf2_sha256$870000$ldpiX4Tjp3zs4ZwIFYFZ62$rZTFXbl2Ek4X+ssaVkhBeFh3wv42RUrkVx/QE8NbWOU=', NULL, 0, 'Clau20', 'Claudia', 'Videla', 'c@gmail.cl', 0, 1, '2024-12-04 06:56:22.120304'),
-(57, 'pbkdf2_sha256$870000$xA1e6bO9bJsA48DkArfuwU$188PVazx5rk6DrmNNpbaWXtT307dNFeYDvM3AFluAxg=', NULL, 0, 'rE4ABXo+r0njgR2i8t', 'string', 'string', 'user@example.com', 0, 1, '2024-12-04 06:57:04.248588'),
-(58, 'pbkdf2_sha256$870000$6FZCN2SJsFH13HW2nNRTw5$BuJ1YJfGOyOaOgHXWnK0vVSOelkZgE8CadMcvGQu+5g=', NULL, 0, 'Clau21', 'Claudia', 'Videla', 'c@gmail.cl', 0, 1, '2024-12-04 07:02:20.826920'),
-(59, 'pbkdf2_sha256$870000$5wzzeGJ74z2bmdykukWPg4$CcOKqWL7PtamG6ZytrK+BnoTrimLoPMbcH0c1x+Hf24=', NULL, 0, 'Clau22', 'Claudia', 'Videla', 'c@gmail.cl', 0, 1, '2024-12-04 07:04:45.555365'),
-(60, 'pbkdf2_sha256$870000$UwzVP1M2QHVlOWucXTo5af$GXm8I5AzyFaRJajv+UUBCyouN3Mf89jxXDffOHaOEBQ=', NULL, 0, 'rE4ABXo+r0njgR2iz8t', 'string', 'string', 'user@example.com', 0, 1, '2024-12-04 07:05:08.620805'),
-(61, 'pbkdf2_sha256$870000$BOTs7HEN7VLVJEtQh9v3JP$xNWcX3t2DYoBrMN2BaylgsgopiiBKU5L8Nx+cht4VSM=', NULL, 0, 'vamrdYrDoiGPIcEDw_ax0.', 'string', 'string', 'user@example.com', 0, 1, '2024-12-04 07:05:57.341387'),
-(62, 'pbkdf2_sha256$870000$0FI3ISsSxT9PkhRguaHxgH$aL201dieM6SGSyRok2fEyW2KoJigOx4kzufHHG9tm3k=', NULL, 0, 'vamrdYrDoiGPIcEssDw_ax0.', 'string', 'string', 'user@example.com', 0, 1, '2024-12-04 07:07:06.372772'),
-(63, 'pbkdf2_sha256$870000$uu3iSHGFQQQdpV41SPG3m4$Z3jluZ4ijYYpMNV4NcPje9WldyY8G+YCVevnc/+4Poo=', NULL, 0, 'Gs6vrjt+RqQHw-DdQ2DCv', 'string', 'string', 'user@example.com', 0, 1, '2024-12-04 07:07:43.184912'),
-(64, 'pbkdf2_sha256$870000$Xo5zS6PW6uImCroKsIvdvl$4TcESSa5ILDIbXfpwSwbKHv826GrA54PxwI9muxC+yw=', NULL, 0, 'Gs6vrjt+RqQHwss-DdQ2DCv', 'string', 'string', 'user@example.com', 0, 1, '2024-12-04 07:08:33.239170'),
-(65, 'pbkdf2_sha256$870000$3ITShWdeNvKH7ZaL0unmJQ$No2+k+6V0Rz6TBJDeflumYzpq6GYw/zRLa0YTiO8NUA=', NULL, 0, 'Clau23', 'Claudia', 'Videla', 'c@gmail.cl', 0, 1, '2024-12-04 07:10:18.774802'),
-(66, 'pbkdf2_sha256$870000$Jo7KjG7l0qWaI2gbYuSd0b$YU7K6yi1vCrhMnl/1+zEIf6kY08Q23A65Kw/jZCrTf4=', NULL, 0, 'Gs6vrjt+RqQHwss-sssDdQ2DCv', 'string', 'string', 'user@example.com', 0, 1, '2024-12-04 07:10:52.176461'),
-(67, 'pbkdf2_sha256$870000$0Fe1bVGsbJ3qMYFJE0OaBw$Ctve5SmmE2Og/lMhG2YtaAPi0km+oc432En6uobXOKk=', NULL, 0, 'Gs6vrjtss+RqQHwss-sssDdQ2DCv', 'string', 'string', 'user@example.com', 0, 1, '2024-12-04 07:11:07.035949'),
-(68, 'pbkdf2_sha256$870000$t2VzKO7FNKm5XH0Yfuv9Fz$oVEZkmDS4SoXeD/eaLVh0VeleonE61UiEAU4GRvFEkQ=', NULL, 0, 'DV@4@HONAuFWmZ5VegcWHfHPmhgsEz3Lo0B8gbUAppykC-k79nWwr', 'string', 'string', 'user@example.com', 0, 1, '2024-12-04 07:12:39.857359');
+(35, 'pbkdf2_sha256$870000$455EHeWPTkCieEjWVIGxtE$bXmrvll+E+vOopop3nXwiICJzxjqRrOrDKLbCHfxOhY=', '2024-12-04 05:04:57.000000', 1, 'Clau', 'Claudia', 'Videla', 'c@gmail.com', 1, 1, '2024-12-04 05:04:33.000000'),
+(77, 'pbkdf2_sha256$870000$SDLHLz5utahFulhkEgFGoe$wAjgXdSrJo5vfLFSV/UlSyrpeBEYuPnE12WuIiEAnc8=', NULL, 0, 'Profe1', 'Clau', 'Videla', '', 0, 1, '2024-12-06 06:02:51.000000'),
+(84, 'pbkdf2_sha256$870000$OHqPz2mhqVvYM1m72UVqtB$qq2blEK+eYsC4sfRtqopBYhhyNafX7l3hPQDv9a6coQ=', NULL, 0, 'Est7', 'Estudiante', '7', 'c@gmail.cl', 0, 1, '2024-12-09 06:08:45.000000');
 
 -- --------------------------------------------------------
 
@@ -342,7 +580,86 @@ INSERT INTO `django_admin_log` (`id`, `action_time`, `object_id`, `object_repr`,
 (92, '2024-12-04 07:15:57.188559', '30', 'Gs6vrjt+RqQHw-DdQ2DCv - student', 3, '', 11, 35),
 (93, '2024-12-04 07:15:57.188559', '31', 'Gs6vrjt+RqQHwss-DdQ2DCv - student', 3, '', 11, 35),
 (94, '2024-12-04 07:15:57.188559', '33', 'Gs6vrjtss+RqQHwss-sssDdQ2DCv - student', 3, '', 11, 35),
-(95, '2024-12-04 07:15:57.188559', '34', 'DV@4@HONAuFWmZ5VegcWHfHPmhgsEz3Lo0B8gbUAppykC-k79nWwr - student', 3, '', 11, 35);
+(95, '2024-12-04 07:15:57.188559', '34', 'DV@4@HONAuFWmZ5VegcWHfHPmhgsEz3Lo0B8gbUAppykC-k79nWwr - student', 3, '', 11, 35),
+(96, '2024-12-04 14:16:12.572167', '46', 'Clau10', 3, '', 4, 35),
+(97, '2024-12-04 14:16:12.572167', '47', 'Clau11', 3, '', 4, 35),
+(98, '2024-12-04 14:16:12.572167', '48', 'Clau12', 3, '', 4, 35),
+(99, '2024-12-04 14:16:12.572167', '49', 'Clau13', 3, '', 4, 35),
+(100, '2024-12-04 14:16:12.572167', '50', 'Clau14', 3, '', 4, 35),
+(101, '2024-12-04 14:16:12.572167', '51', 'Clau15', 3, '', 4, 35),
+(102, '2024-12-04 14:16:12.572167', '52', 'Clau16', 3, '', 4, 35),
+(103, '2024-12-04 14:16:12.572167', '53', 'Clau17', 3, '', 4, 35),
+(104, '2024-12-04 14:16:12.572167', '54', 'Clau18', 3, '', 4, 35),
+(105, '2024-12-04 14:16:12.572167', '55', 'Clau19', 3, '', 4, 35),
+(106, '2024-12-04 14:16:12.572167', '36', 'Clau2', 3, '', 4, 35),
+(107, '2024-12-04 14:16:12.572167', '56', 'Clau20', 3, '', 4, 35),
+(108, '2024-12-04 14:16:12.572167', '58', 'Clau21', 3, '', 4, 35),
+(109, '2024-12-04 14:16:12.572167', '59', 'Clau22', 3, '', 4, 35),
+(110, '2024-12-04 14:16:12.572167', '65', 'Clau23', 3, '', 4, 35),
+(111, '2024-12-04 14:16:12.572167', '37', 'Clau3', 3, '', 4, 35),
+(112, '2024-12-04 14:16:12.572167', '38', 'Clau4', 3, '', 4, 35),
+(113, '2024-12-04 14:16:12.572167', '39', 'Clau5', 3, '', 4, 35),
+(114, '2024-12-04 14:16:12.572167', '40', 'Clau6', 3, '', 4, 35),
+(115, '2024-12-04 14:16:12.572167', '44', 'Clau8', 3, '', 4, 35),
+(116, '2024-12-04 14:16:12.572167', '45', 'Clau9', 3, '', 4, 35),
+(117, '2024-12-04 14:16:12.572167', '68', 'DV@4@HONAuFWmZ5VegcWHfHPmhgsEz3Lo0B8gbUAppykC-k79nWwr', 3, '', 4, 35),
+(118, '2024-12-04 14:16:12.572167', '69', 'ghcsdd@b222q+G++', 3, '', 4, 35),
+(119, '2024-12-04 14:16:12.572167', '70', 'ghcsdd@b222qk+G++', 3, '', 4, 35),
+(120, '2024-12-04 14:16:12.572167', '63', 'Gs6vrjt+RqQHw-DdQ2DCv', 3, '', 4, 35),
+(121, '2024-12-04 14:16:12.573165', '64', 'Gs6vrjt+RqQHwss-DdQ2DCv', 3, '', 4, 35),
+(122, '2024-12-04 14:16:12.573165', '66', 'Gs6vrjt+RqQHwss-sssDdQ2DCv', 3, '', 4, 35),
+(123, '2024-12-04 14:16:12.573165', '67', 'Gs6vrjtss+RqQHwss-sssDdQ2DCv', 3, '', 4, 35),
+(124, '2024-12-04 14:16:12.573165', '57', 'rE4ABXo+r0njgR2i8t', 3, '', 4, 35),
+(125, '2024-12-04 14:16:12.573165', '60', 'rE4ABXo+r0njgR2iz8t', 3, '', 4, 35),
+(126, '2024-12-04 14:16:12.573165', '42', 'ssy', 3, '', 4, 35),
+(127, '2024-12-04 14:16:12.573165', '41', 'sy', 3, '', 4, 35),
+(128, '2024-12-04 14:16:12.573165', '61', 'vamrdYrDoiGPIcEDw_ax0.', 3, '', 4, 35),
+(129, '2024-12-04 14:16:12.573165', '62', 'vamrdYrDoiGPIcEssDw_ax0.', 3, '', 4, 35),
+(130, '2024-12-04 14:39:33.360659', '16', 'Avatar 16', 1, '[{\"added\": {}}]', 10, 35),
+(131, '2024-12-04 16:46:22.042573', '17', 'Clau - Concepto espacio muestral - 11 - 99%', 1, '[{\"added\": {}}]', 18, 35),
+(132, '2024-12-06 00:43:28.554945', '17', 'Avatar 17', 1, '[{\"added\": {}}]', 10, 35),
+(133, '2024-12-06 00:43:44.990465', '18', 'Fondo Nivel 18', 1, '[{\"added\": {}}]', 10, 35),
+(134, '2024-12-06 00:45:12.743526', '19', 'Fondo Nivel 19', 1, '[{\"added\": {}}]', 10, 35),
+(135, '2024-12-06 00:45:21.744521', '20', 'Avatar 20', 1, '[{\"added\": {}}]', 10, 35),
+(136, '2024-12-06 02:58:01.618886', '27', 'Clau - Concepto espacio muestral - 11 - 99%', 1, '[{\"added\": {}}]', 18, 35),
+(137, '2024-12-06 04:52:55.770099', '29', 'Clau - Experimentos - 17 - 100%', 3, '', 18, 35),
+(138, '2024-12-06 04:52:55.770099', '28', 'Clau - Experimentos - 17 - 100%', 3, '', 18, 35),
+(139, '2024-12-06 04:52:55.770099', '27', 'Clau - Concepto espacio muestral - 11 - 99%', 3, '', 18, 35),
+(140, '2024-12-06 04:52:55.770099', '26', 'Clau - Tipos de Experimentos - 26 - 100%', 3, '', 18, 35),
+(141, '2024-12-06 05:58:11.181244', '71', 'Clau2', 3, '', 4, 35),
+(142, '2024-12-06 05:58:11.181244', '72', 'Clau3', 3, '', 4, 35),
+(143, '2024-12-06 05:58:11.181244', '73', 'Clau4', 3, '', 4, 35),
+(144, '2024-12-06 06:02:52.242541', '77', 'Profe1', 1, '[{\"added\": {}}, {\"added\": {\"name\": \"Perfil\", \"object\": \"Profe1 - teacher\"}}]', 4, 35),
+(145, '2024-12-06 06:29:20.774525', '77', 'Profe1', 2, '[{\"changed\": {\"fields\": [\"First name\", \"Last name\"]}}, {\"changed\": {\"name\": \"Perfil\", \"object\": \"Profe1 - teacher\", \"fields\": [\"Colegio\", \"Curso\"]}}]', 4, 35),
+(146, '2024-12-06 06:31:45.635859', '35', 'Clau', 2, '[{\"changed\": {\"fields\": [\"First name\", \"Last name\"]}}, {\"changed\": {\"name\": \"Perfil\", \"object\": \"Clau - student\", \"fields\": [\"Pais\", \"Rut\"]}}]', 4, 35),
+(147, '2024-12-06 16:29:56.559678', '7', 'Docente: Profe1 - Estudiante: Clau - Confirmado: False', 2, '[]', 19, 35),
+(148, '2024-12-06 17:02:47.459304', '8', 'Docente: Profe1 - Estudiante: est6 - Confirmado: True', 2, '[{\"changed\": {\"fields\": [\"Confirmado\"]}}]', 19, 35),
+(149, '2024-12-06 17:02:57.156791', '7', 'Docente: Profe1 - Estudiante: Clau - Confirmado: False', 2, '[]', 19, 35),
+(150, '2024-12-06 17:03:00.125600', '8', 'Docente: Profe1 - Estudiante: est6 - Confirmado: False', 2, '[{\"changed\": {\"fields\": [\"Confirmado\"]}}]', 19, 35),
+(151, '2024-12-06 17:06:23.518629', '7', 'Docente: Profe1 - Estudiante: Clau - Confirmado: False', 3, '', 19, 35),
+(152, '2024-12-06 17:18:13.512540', '9', 'Docente: Profe1 - Estudiante: Clau - Confirmado: False', 3, '', 19, 35),
+(153, '2024-12-06 18:42:50.390927', '10', 'Docente: Profe1 - Estudiante: Clau - Confirmado: True', 2, '[{\"changed\": {\"fields\": [\"Confirmado\"]}}]', 19, 35),
+(154, '2024-12-07 17:45:18.850402', '21', 'Clau - student', 2, '[]', 11, 35),
+(155, '2024-12-07 17:45:21.824122', '40', 'Profe1 - teacher', 2, '[{\"changed\": {\"fields\": [\"Colegio\", \"Curso\"]}}]', 11, 35),
+(156, '2024-12-07 17:45:56.256648', '40', 'Profe1 - teacher', 2, '[{\"changed\": {\"fields\": [\"Colegio\", \"Curso\"]}}]', 11, 35),
+(157, '2024-12-07 17:46:19.155209', '77', 'Profe1', 2, '[{\"changed\": {\"fields\": [\"password\"]}}]', 4, 35),
+(158, '2024-12-08 23:04:48.554008', '77', 'Profe1', 2, '[{\"changed\": {\"fields\": [\"password\"]}}]', 4, 35),
+(159, '2024-12-09 03:50:45.708862', '21', 'AvatarDocente 21', 1, '[{\"added\": {}}]', 10, 35),
+(160, '2024-12-09 03:51:55.409487', '22', 'AvatarDocente 22', 1, '[{\"added\": {}}]', 10, 35),
+(161, '2024-12-09 03:52:20.086734', '21', 'AvatarDocente 21', 3, '', 10, 35),
+(162, '2024-12-09 04:38:19.037639', '23', 'AvatarDocente 23', 1, '[{\"added\": {}}]', 10, 35),
+(163, '2024-12-09 06:08:33.570735', '78', 'est1', 3, '', 4, 35),
+(164, '2024-12-09 06:08:33.570735', '79', 'est2', 3, '', 4, 35),
+(165, '2024-12-09 06:08:33.570735', '80', 'est3', 3, '', 4, 35),
+(166, '2024-12-09 06:08:33.570735', '81', 'est4', 3, '', 4, 35),
+(167, '2024-12-09 06:08:33.570735', '82', 'est5', 3, '', 4, 35),
+(168, '2024-12-09 06:08:33.570735', '83', 'est6', 3, '', 4, 35),
+(169, '2024-12-09 06:09:27.972106', '84', 'Est7', 2, '[{\"added\": {\"name\": \"Perfil\", \"object\": \"Est7 - student\"}}]', 4, 35),
+(170, '2024-12-09 22:31:47.109670', '24', 'Fondo Nivel 24', 1, '[{\"added\": {}}]', 10, 35),
+(171, '2024-12-09 22:31:55.189802', '25', 'Fondo Nivel 25', 1, '[{\"added\": {}}]', 10, 35),
+(172, '2024-12-09 22:32:38.437548', 'P01', 'Probabilidad clásica 01', 2, '[{\"changed\": {\"fields\": [\"Fondo tarjeta\"]}}]', 15, 35),
+(173, '2024-12-09 22:32:51.224714', 'PC01', 'Prueba', 2, '[{\"changed\": {\"fields\": [\"Fondo tarjeta\"]}}]', 15, 35),
+(174, '2024-12-10 19:21:12.108242', '36', 'Clau - Concepto espacio muestral - 11 - 99%', 1, '[{\"added\": {}}]', 18, 35);
 
 -- --------------------------------------------------------
 
@@ -433,7 +750,11 @@ INSERT INTO `django_migrations` (`id`, `app`, `name`, `applied`) VALUES
 (31, 'mattrix_contenido', '0005_etapas_contenido_abordado', '2024-12-03 03:20:24.880367'),
 (32, 'mattrix_docentes', '0004_remove_avanceestudiantes_cantidad_intentos', '2024-12-03 20:19:50.353162'),
 (33, 'mattrix_contenido', '0006_etapas_es_ultima', '2024-12-04 03:55:37.112855'),
-(34, 'mattrix_usuarios', '0005_alter_profile_colegio_alter_profile_curso_and_more', '2024-12-04 04:51:37.775885');
+(34, 'mattrix_usuarios', '0005_alter_profile_colegio_alter_profile_curso_and_more', '2024-12-04 04:51:37.775885'),
+(35, 'mattrix_docentes', '0005_rename_id_avance_respuestaescrita_avance_and_more', '2024-12-04 17:02:35.064641'),
+(36, 'mattrix_usuarios', '0006_alter_profile_avataruser', '2024-12-06 14:54:40.254126'),
+(37, 'mattrix_contenido', '0007_niveles_descripcion', '2024-12-09 22:35:29.485600'),
+(38, 'mattrix_usuarios', '0007_alter_imagenes_uso', '2024-12-09 22:35:29.490600');
 
 -- --------------------------------------------------------
 
@@ -454,8 +775,8 @@ CREATE TABLE `django_session` (
 INSERT INTO `django_session` (`session_key`, `session_data`, `expire_date`) VALUES
 ('7fplnw90ht4gslhppjkcaizp60ozc0xi', '.eJxVjMsOwiAURP-FtSFAebp07zcQuPdWqgaS0q6M_64kXehuMufMvFhM-1bi3mmNC7Izc-z02-UED6oD4D3VW-PQ6rYumQ-FH7Tza0N6Xg7376CkXr5r7ZRFq7WbyCStZmGC9DPhJEQAsjZ7SUEAegVGKpfzSCQhJFAktWTvD8xEN6M:1tHRyI:S5-mUzB7hZr7iHskBT1T6xZwVnqLYNi5K1o-904E4Nk', '2024-12-14 18:13:34.271743'),
 ('jgfar9e0deaw3ue068zjttnk3rgovqk6', '.eJxVjMsOwiAURP-FtSFAebp07zcQuPdWqgaS0q6M_64kXehuMufMvFhM-1bi3mmNC7Izc-z02-UED6oD4D3VW-PQ6rYumQ-FH7Tza0N6Xg7376CkXr5r7ZRFq7WbyCStZmGC9DPhJEQAsjZ7SUEAegVGKpfzSCQhJFAktWTvD8xEN6M:1tIZv7:IVWQGJ1KkwZT8fwA6vz-ABidwQGY52v1CTSs0wbLqD8', '2024-12-17 20:54:57.110398'),
-('o92zit4uckqcc5qg1qd7s9idnpcplams', '.eJxVjEsOwjAMBe-SNYpCXNcNS_acIXLsQAookfpZIe4OlbqA7ZuZ9zKR16XEdc5THNWcDKA5_I6J5ZHrRvTO9dastLpMY7KbYnc620vT_Dzv7t9B4bl86yAeBdE5JA_AmTsZkPCqmCAw9QCZdEiuz0oiiV3S0HUeCEmOKmTeH_wmOAo:1tIhZJ:Pg8NZP7PpNuqj9S_f6qRLUqYHGlXSnQNQjNU4u9MmVA', '2024-12-18 05:04:57.867454'),
-('qq6de08etx34f3az8p7qppd4547xdnrd', '.eJxVjMsOwiAURP-FtSFAebp07zcQuPdWqgaS0q6M_64kXehuMufMvFhM-1bi3mmNC7Izc-z02-UED6oD4D3VW-PQ6rYumQ-FH7Tza0N6Xg7376CkXr5r7ZRFq7WbyCStZmGC9DPhJEQAsjZ7SUEAegVGKpfzSCQhJFAktWTvD8xEN6M:1tIY8O:ZEyA-yneE09TAu2RIU__zZVUkinSPbeZtUqxhptnqo4', '2024-12-17 19:00:32.919793');
+('qq6de08etx34f3az8p7qppd4547xdnrd', '.eJxVjMsOwiAURP-FtSFAebp07zcQuPdWqgaS0q6M_64kXehuMufMvFhM-1bi3mmNC7Izc-z02-UED6oD4D3VW-PQ6rYumQ-FH7Tza0N6Xg7376CkXr5r7ZRFq7WbyCStZmGC9DPhJEQAsjZ7SUEAegVGKpfzSCQhJFAktWTvD8xEN6M:1tIY8O:ZEyA-yneE09TAu2RIU__zZVUkinSPbeZtUqxhptnqo4', '2024-12-17 19:00:32.919793'),
+('yiygzbe2mita3x5spafdmems6dkka6ft', '.eJxVjEsOwjAMBe-SNYpCXNcNS_acIXLsQAookfpZIe4OlbqA7ZuZ9zKR16XEdc5THNWcDKA5_I6J5ZHrRvTO9dastLpMY7KbYnc620vT_Dzv7t9B4bl86yAeBdE5JA_AmTsZkPCqmCAw9QCZdEiuz0oiiV3S0HUeCEmOKmTeH_wmOAo:1tKQKW:MtFBIDX89qZDLo51f6iZDy_swpDyK_4Ezo5i6RPBiXc', '2024-12-22 23:04:48.565189');
 
 -- --------------------------------------------------------
 
@@ -583,16 +904,17 @@ CREATE TABLE `mattrix_contenido_niveles` (
   `nombre` varchar(255) NOT NULL,
   `fondo_id` int(11) DEFAULT NULL,
   `OA_id` int(11) NOT NULL,
-  `fondo_tarjeta_id` int(11) DEFAULT NULL
+  `fondo_tarjeta_id` int(11) DEFAULT NULL,
+  `descripcion` varchar(255) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;
 
 --
 -- Volcado de datos para la tabla `mattrix_contenido_niveles`
 --
 
-INSERT INTO `mattrix_contenido_niveles` (`id_nivel`, `nombre`, `fondo_id`, `OA_id`, `fondo_tarjeta_id`) VALUES
-('P01', 'Probabilidad clásica 01', 8, 1, 13),
-('PC01', 'Prueba', 14, 1, 12);
+INSERT INTO `mattrix_contenido_niveles` (`id_nivel`, `nombre`, `fondo_id`, `OA_id`, `fondo_tarjeta_id`, `descripcion`) VALUES
+('P01', 'Probabilidad clásica 01', 19, 1, 24, 'descripcion'),
+('PC01', 'Prueba', 18, 1, 25, 'descripcion');
 
 -- --------------------------------------------------------
 
@@ -688,6 +1010,17 @@ CREATE TABLE `mattrix_docentes_avanceestudiantes` (
   `etapa_id` int(11) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;
 
+--
+-- Volcado de datos para la tabla `mattrix_docentes_avanceestudiantes`
+--
+
+INSERT INTO `mattrix_docentes_avanceestudiantes` (`id_avance`, `tiempo`, `fecha_completada`, `logro`, `estudiante_id`, `etapa_id`) VALUES
+(33, '84', '2024-12-09 16:20:23.741571', 100, 35, 3),
+(34, '111', '2024-12-09 16:24:01.721968', 80, 35, 3),
+(35, '10', '2024-12-10 00:59:39.000000', 90, 35, 3),
+(36, '11', '2024-12-10 19:21:12.107241', 99, 35, 1),
+(37, '28', '2024-12-10 21:06:01.399792', 100, 35, 3);
+
 -- --------------------------------------------------------
 
 --
@@ -702,6 +1035,14 @@ CREATE TABLE `mattrix_docentes_docenteestudiante` (
   `fecha_creacion` datetime(6) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;
 
+--
+-- Volcado de datos para la tabla `mattrix_docentes_docenteestudiante`
+--
+
+INSERT INTO `mattrix_docentes_docenteestudiante` (`id`, `confirmado`, `docente_id`, `estudiante_id`, `fecha_creacion`) VALUES
+(10, 1, 40, 21, '2024-12-06 17:18:20.589164'),
+(11, 1, 40, 47, '2024-12-09 06:09:51.943334');
+
 -- --------------------------------------------------------
 
 --
@@ -710,11 +1051,24 @@ CREATE TABLE `mattrix_docentes_docenteestudiante` (
 
 CREATE TABLE `mattrix_docentes_respuestaescrita` (
   `id` bigint(20) NOT NULL,
-  `respuesta1` longtext NOT NULL,
-  `respuesta2` longtext DEFAULT NULL,
-  `respuesta3` longtext DEFAULT NULL,
-  `id_avance_id` bigint(20) NOT NULL
+  `avance_id` bigint(20) NOT NULL,
+  `pregunta` longtext NOT NULL,
+  `respuesta` longtext NOT NULL,
+  `retroalimentacion` longtext DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;
+
+--
+-- Volcado de datos para la tabla `mattrix_docentes_respuestaescrita`
+--
+
+INSERT INTO `mattrix_docentes_respuestaescrita` (`id`, `avance_id`, `pregunta`, `respuesta`, `retroalimentacion`) VALUES
+(93, 33, 'Un experimento determinista es:', 'prueba1', 'bueno'),
+(94, 33, 'Un experimento aleatorio es:', 'prueba1', 'mejor'),
+(95, 34, 'Un experimento determinista es:', 'prueba2', 'super'),
+(96, 34, 'Un experimento aleatorio es:', 'prueba2', NULL),
+(97, 36, 'sadsada', 'sadsadasdsda', NULL),
+(98, 37, 'Un experimento determinista es:', 'Prueba4', NULL),
+(99, 37, 'Un experimento aleatorio es:', 'Prueba4', NULL);
 
 -- --------------------------------------------------------
 
@@ -733,20 +1087,14 @@ CREATE TABLE `mattrix_usuarios_imagenes` (
 --
 
 INSERT INTO `mattrix_usuarios_imagenes` (`id_imagen`, `imagen`, `uso`) VALUES
-(1, 'avatars/avatar_None.png', 'avatar'),
-(2, 'avatars/avatar_None_nindhks.png', 'avatar'),
-(3, 'avatars/avatar_None_A6B9oWF.png', 'avatar'),
-(4, 'avatars/avatar_None_ntLOrzR.png', 'avatar'),
-(5, 'avatars/avatar_None.jpg', 'avatar'),
-(6, 'avatars/avatar_None_MDp2Ri9.jpg', 'avatar'),
-(7, 'fondos/fondo_nivel_None.png', 'fondo-nivel'),
-(8, 'fondos/fondo_nivel_8_MqxfeUK.png', 'fondo-nivel'),
-(10, 'avatars/avatar_None_SmqsF8p.jpg', 'avatar'),
-(11, 'avatars/avatar_11.jpg', 'avatar'),
-(12, 'fondos/fondo_nivel_12.png', 'fondo-nivel'),
-(13, 'fondos/fondo_nivel_13.png', 'fondo-nivel'),
-(14, 'fondos/fondo_nivel_14_Z0g43dy.png', 'fondo-nivel'),
-(15, 'fondos/fondo_nivel_15.png', 'fondo-nivel');
+(17, 'avatars/avatar_17.png', 'avatar'),
+(18, 'fondos/fondo_nivel_18.png', 'fondo-nivel'),
+(19, 'fondos/fondo_nivel_19.png', 'fondo-nivel'),
+(20, 'avatars/avatar_20.png', 'avatar'),
+(22, 'avatarDocente/avatar_docente_22.jpg', 'avatarDocente'),
+(23, 'avatarDocente/avatar_docente_23.png', 'avatarDocente'),
+(24, 'fondos/fondo_nivel_24.png', 'fondo-nivel'),
+(25, 'fondos/fondo_nivel_25.png', 'fondo-nivel');
 
 -- --------------------------------------------------------
 
@@ -770,7 +1118,9 @@ CREATE TABLE `mattrix_usuarios_profile` (
 --
 
 INSERT INTO `mattrix_usuarios_profile` (`id`, `rol`, `pais`, `rut`, `avatarUser_id`, `colegio_id`, `curso_id`, `user_id`) VALUES
-(21, 'student', '', '', 5, 1, 1, 35);
+(21, 'student', 'Chile', '18549895-6', 20, 1, 1, 35),
+(40, 'teacher', 'Chile', '18.903.564-0', 22, NULL, NULL, 77),
+(47, 'student', 'Chile', '8.498.683-6', 17, 1, 1, 84);
 
 --
 -- Índices para tablas volcadas
@@ -938,7 +1288,7 @@ ALTER TABLE `mattrix_docentes_docenteestudiante`
 --
 ALTER TABLE `mattrix_docentes_respuestaescrita`
   ADD PRIMARY KEY (`id`),
-  ADD KEY `mattrix_docentes_res_id_avance_id_febd98e5_fk_mattrix_d` (`id_avance_id`);
+  ADD KEY `mattrix_docentes_res_avance_id_d981c186_fk_mattrix_d` (`avance_id`);
 
 --
 -- Indices de la tabla `mattrix_usuarios_imagenes`
@@ -953,9 +1303,9 @@ ALTER TABLE `mattrix_usuarios_profile`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `user_id` (`user_id`),
   ADD UNIQUE KEY `rut` (`rut`),
-  ADD KEY `mattrix_usuarios_pro_avatarUser_id_53e9e892_fk_mattrix_u` (`avatarUser_id`),
   ADD KEY `mattrix_usuarios_pro_colegio_id_45d247d5_fk_mattrix_a` (`colegio_id`),
-  ADD KEY `mattrix_usuarios_pro_curso_id_65de4eed_fk_mattrix_a` (`curso_id`);
+  ADD KEY `mattrix_usuarios_pro_curso_id_65de4eed_fk_mattrix_a` (`curso_id`),
+  ADD KEY `mattrix_usuarios_pro_avatarUser_id_53e9e892_fk_mattrix_u` (`avatarUser_id`);
 
 --
 -- AUTO_INCREMENT de las tablas volcadas
@@ -983,7 +1333,7 @@ ALTER TABLE `auth_permission`
 -- AUTO_INCREMENT de la tabla `auth_user`
 --
 ALTER TABLE `auth_user`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=69;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=85;
 
 --
 -- AUTO_INCREMENT de la tabla `auth_user_groups`
@@ -1001,7 +1351,7 @@ ALTER TABLE `auth_user_user_permissions`
 -- AUTO_INCREMENT de la tabla `django_admin_log`
 --
 ALTER TABLE `django_admin_log`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=96;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=175;
 
 --
 -- AUTO_INCREMENT de la tabla `django_content_type`
@@ -1013,7 +1363,7 @@ ALTER TABLE `django_content_type`
 -- AUTO_INCREMENT de la tabla `django_migrations`
 --
 ALTER TABLE `django_migrations`
-  MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=35;
+  MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=39;
 
 --
 -- AUTO_INCREMENT de la tabla `mattrix_admin_colegio`
@@ -1067,31 +1417,31 @@ ALTER TABLE `mattrix_contenido_terminospareados`
 -- AUTO_INCREMENT de la tabla `mattrix_docentes_avanceestudiantes`
 --
 ALTER TABLE `mattrix_docentes_avanceestudiantes`
-  MODIFY `id_avance` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=17;
+  MODIFY `id_avance` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=38;
 
 --
 -- AUTO_INCREMENT de la tabla `mattrix_docentes_docenteestudiante`
 --
 ALTER TABLE `mattrix_docentes_docenteestudiante`
-  MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+  MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=12;
 
 --
 -- AUTO_INCREMENT de la tabla `mattrix_docentes_respuestaescrita`
 --
 ALTER TABLE `mattrix_docentes_respuestaescrita`
-  MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=100;
 
 --
 -- AUTO_INCREMENT de la tabla `mattrix_usuarios_imagenes`
 --
 ALTER TABLE `mattrix_usuarios_imagenes`
-  MODIFY `id_imagen` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=16;
+  MODIFY `id_imagen` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=26;
 
 --
 -- AUTO_INCREMENT de la tabla `mattrix_usuarios_profile`
 --
 ALTER TABLE `mattrix_usuarios_profile`
-  MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=35;
+  MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=48;
 
 --
 -- Restricciones para tablas volcadas
@@ -1182,7 +1532,7 @@ ALTER TABLE `mattrix_docentes_docenteestudiante`
 -- Filtros para la tabla `mattrix_docentes_respuestaescrita`
 --
 ALTER TABLE `mattrix_docentes_respuestaescrita`
-  ADD CONSTRAINT `mattrix_docentes_res_id_avance_id_febd98e5_fk_mattrix_d` FOREIGN KEY (`id_avance_id`) REFERENCES `mattrix_docentes_avanceestudiantes` (`id_avance`);
+  ADD CONSTRAINT `mattrix_docentes_res_avance_id_d981c186_fk_mattrix_d` FOREIGN KEY (`avance_id`) REFERENCES `mattrix_docentes_avanceestudiantes` (`id_avance`);
 
 --
 -- Filtros para la tabla `mattrix_usuarios_profile`

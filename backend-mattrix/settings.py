@@ -23,7 +23,8 @@ ALLOWED_HOSTS = [
     'localhost',
     'mathrix.cl',
     'www.mathrix.cl',
-]
+    ]
+
 
 # Application definition
 
@@ -94,6 +95,7 @@ CORS_ALLOWED_ORIGINS = [
     'https://35.87.82.233',
     'https://mathrix.cl',
     'https://www.mathrix.cl',
+    'https://54.190.154.80',
 ]
 
 CORS_ALLOW_CREDENTIALS = True
@@ -154,6 +156,7 @@ DATABASES = {
         'PORT': '3306',
     }
 }
+
 
 
 # Password validation

@@ -42,6 +42,7 @@ class IndicadoresEvaluacion(models.Model):
 class Niveles(models.Model):
     id_nivel = models.CharField(primary_key=True, max_length=10)
     nombre = models.CharField(max_length=255)
+    descripcion = models.CharField(max_length=255)
     OA = models.ForeignKey(OA, on_delete=models.CASCADE)
     fondo = models.ForeignKey(
         Imagenes,
@@ -86,7 +87,7 @@ class Etapas(models.Model):
     ]
     habilidad_matematica = models.TextField(max_length=50, choices=HABILIDAD_MATEMATICA)
     HABILIDAD_BLOOM = [
-        ("Conocer", "Conocer"),
+        ("Recordar", "Recordar"),
         ("Comprender", "Comprender"),
         ("Aplicar", "Aplicar"),        
         ("Analizar", "Analizar"),

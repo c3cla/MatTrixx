@@ -97,6 +97,7 @@ def obtener_ruta_imagen(instance, filename):
 class Imagenes(models.Model):
     USO_CHOICES = [
         ('avatar', 'Avatar'),
+        ('avatarDocente', 'AvatarDocente'),
         ('fondo-nivel', 'Fondo Nivel'),
     ]
     id_imagen = models.AutoField(primary_key=True)
@@ -112,6 +113,8 @@ class Imagenes(models.Model):
             extension = self.imagen.name.split('.')[-1]
             if self.uso == 'avatar':
                 nueva_ruta = f'avatars/avatar_{self.id_imagen}.{extension}'
+            elif self.uso == 'avatarDocente':
+                nueva_ruta = f'avatarDocente/avatar_docente_{self.id_imagen}.{extension}'
             elif self.uso == 'fondo-nivel':
                 nueva_ruta = f'fondos/fondo_nivel_{self.id_imagen}.{extension}'
             else:
@@ -138,7 +141,7 @@ class Profile(models.Model):
     ]
     user = models.OneToOneField(User, on_delete=models.CASCADE) #on_delete=models.CASCADE asegura eliminar el Profile cuando se elimina el User asociado
     rol = models.CharField(max_length=20, choices=ROLE_CHOICES, default='student')
-    avatarUser = models.ForeignKey(Imagenes, on_delete=models.SET_NULL, null=True, default="1",
+    avatarUser = models.ForeignKey(Imagenes, on_delete=models.SET_NULL, null=True, default="17",
         related_name="profiles")
     pais = models.CharField(max_length=20, choices=[
         ('Chile', 'Chile'),
@@ -153,23 +156,23 @@ class Profile(models.Model):
     def __str__(self):
         return f"{self.user.username} - {self.rol}"
     
-    #def clean(self): #permite validar el rut, si no al no estar "guardado" el país al registrarse no puede validar rut
-    #    super().clean()
-    #    if self.rut and self.pais:
-    #        try:
-    #            self.rut = validar_rut_general(self.rut, self.pais)
-    #        except ValidationError as e:
-    #            raise ValidationError({'rut': e.messages})
+    def clean(self): #permite validar el rut, si no al no estar "guardado" el país al registrarse no puede validar rut
+        super().clean()
+        if self.rut and self.pais:
+            try:
+                self.rut = validar_rut_general(self.rut, self.pais)
+            except ValidationError as e:
+                raise ValidationError({'rut': e.messages})
 
     def save(self, *args, **kwargs):
         if self.rol == 'teacher':
             self.colegio = None
             self.curso = None
-        #if self.rut:
-         #   self.full_clean()
+        if self.rut:
+            self.full_clean()
         if not self.avatarUser:
             try:
-                avatar_por_defecto = Imagenes.objects.get(imagen='avatars/avatar_None.png')
+                avatar_por_defecto = Imagenes.objects.get(imagen='avatars/avatar_1.png')
             except Imagenes.DoesNotExist:
                 avatar_por_defecto = None
             self.avatarUser = avatar_por_defecto

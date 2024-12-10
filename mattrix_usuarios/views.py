@@ -1,5 +1,5 @@
 ###################### INICIO IMPORTACIONES ######################
-
+from django.db import connection
 from django.contrib.auth.models import User
 
 from rest_framework import generics, status
@@ -69,7 +69,50 @@ class ObtenerUsuarioAPIView(APIView):
         avatars = Imagenes.objects.filter(uso='avatar')
         data = [{'id': avatar.id_imagen, 'imagen_url': request.build_absolute_uri(avatar.imagen.url)} for avatar in avatars]
         return Response(data)
-   
+
+
+##### MainEstudiante.jsx
+# Busca algunos datos del estudiante cuando inicia sesión
+class DatosEstudianteView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        user_id = request.user.id
+        try:
+            with connection.cursor() as cursor:
+                # Obtener datos generales del estudiante
+                cursor.callproc("ObtenerDatosEstudiante", [user_id, "", "", ""])
+                cursor.execute("SELECT @p1 AS nombre_completo, @p2 AS id_usuario, @p3 AS avatar_usuario;")
+                result = cursor.fetchone()
+
+                if not result:
+                    return Response({"error": "No se encontraron datos para el estudiante."}, status=404)
+
+                nombre_completo = result[0]
+                id_usuario = result[1]
+                avatar_id = result[2]
+
+                # Llamar al procedimiento para obtener la URL del avatar
+                cursor.callproc("ObtenerImagenAvatar", [avatar_id, ""])
+                cursor.execute("SELECT @p_imagen;")
+                avatar_url_result = cursor.fetchone()
+
+                if avatar_url_result and avatar_url_result[0]:
+                    avatar_url = avatar_url_result[0]
+                else:
+                    avatar_url = "avatars/avatar_1.png"  # URL genérica por defecto
+
+            return Response({
+                "nombre_completo": nombre_completo,
+                "id_usuario": id_usuario,
+                "avatar_usuario": avatar_url
+            })
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+
+
+
+
 class ListaAvatarsAPIView(APIView):
     permission_classes = [AllowAny]
 

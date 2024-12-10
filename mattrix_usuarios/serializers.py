@@ -13,12 +13,33 @@ from .models import Profile, Imagenes
 
 ###################### FIN IMPORTACIONES ########################
 
+class DocenteSerializer(serializers.ModelSerializer):
+    nombre_completo = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Profile
+        fields = [
+            'id',  # Asegúrate de incluir el campo id
+            'avatarUser',
+            'rol',
+            'pais',
+            'rut',
+            'colegio',
+            'curso',
+            'nombre_completo',
+        ]
+
+    def get_nombre_completo(self, obj):
+        return f"{obj.user.first_name} {obj.user.last_name}"
+
+
+
 class ProfileSerializer(serializers.ModelSerializer): 
     nombre_completo = serializers.SerializerMethodField()
 
     class Meta:
         model = Profile
-        fields = ['pais', 'rut', 'rol', 'colegio', 'curso']
+        fields = ['avatarUser', 'rol','pais',  'rut', 'colegio', 'curso', 'nombre_completo']
 
     def validate(self, data):
         if not data.get('pais'):
@@ -29,9 +50,9 @@ class ProfileSerializer(serializers.ModelSerializer):
 
     def get_nombre_completo(self, obj):
         return f"{obj.user.first_name} {obj.user.last_name}"
-    
+
+#Crea una clase Usuario con la información de Perfil y User agrupadas
 class UsuarioSerializer(serializers.ModelSerializer):
-    # Incluir un serializer para manejar el modelo Profile
     profile = ProfileSerializer()
 
     class Meta:
@@ -43,12 +64,11 @@ class UsuarioSerializer(serializers.ModelSerializer):
             'first_name',
             'last_name',
             'email',
-            'profile',  # Agregamos el campo profile
+            'profile',  
         ]
         extra_kwargs = {"password": {"write_only": True}}
 
     def create(self, validated_data):
-        # Extraer los datos del perfil
         profile_data = validated_data.pop('profile', {})
         password = validated_data.pop('password', None)
 
@@ -62,12 +82,18 @@ class UsuarioSerializer(serializers.ModelSerializer):
         Profile.objects.create(user=user, **profile_data)
 
         return user
+    
+    def update(self, instance, datos_validados):
+        profile_data = datos_validados.pop('profile')
+        
+        # Actualizar usuario
+        for atributo, valor in datos_validados.items():
+            setattr(instance, atributo, valor)
+        instance.save()
 
-
-
-
-
-
+        # Actualizar profile asociado
+        Profile.objects.update_or_create(user=instance, defaults=profile_data)
+        return instance
 
 
 
@@ -83,84 +109,7 @@ class UsuarioListSerializer(serializers.ModelSerializer):
         model = User
         fields = ['id', 'username', 'email', 'first_name', 'last_name', 'rol', 'rut', 'colegio', 'curso']
 
-#Crea una clase Usuario con la información de Perfil y User agrupadas
-class UsuarioSerializer(serializers.ModelSerializer):
-    avatarUser = serializers.PrimaryKeyRelatedField(
-        queryset=Imagenes.objects.all(), required=False
-    )
-    rol = serializers.CharField(required=False)
-    pais = serializers.CharField(required=True)
-    rut = serializers.CharField(required=True)
-    colegio = serializers.PrimaryKeyRelatedField(
-        queryset=Colegio.objects.all(), required=False
-    )
-    curso = serializers.PrimaryKeyRelatedField(
-        queryset=Cursos.objects.all(), required=False
-    )
 
-    class Meta:
-        model = User
-        fields = [
-            'id',
-            'username',
-            'password',
-            'first_name',
-            'last_name',
-            'email',
-            'pais',
-            'rut',
-            'avatarUser',
-            'rol',
-            'colegio',
-            'curso',
-        ]
-        extra_kwargs = {"password": {"write_only": True}}
-
-    def create(self, datos_validados):
-        datos_profile = {
-        'avatarUser': datos_validados.pop('avatarUser', '1'),
-        'rol': datos_validados.pop('rol', 'student'),
-        'pais': datos_validados.pop('pais', 'Chile'),
-        'rut': datos_validados.pop('rut', ''),
-        'colegio': datos_validados.pop('colegio', '1'),
-        'curso': datos_validados.pop('curso', '1'),
-        }
-        contraseña = datos_validados.pop('password', None)
-
-        # Crear usuario
-        user = User.objects.create(**datos_validados)
-        if contraseña:
-            user.set_password(contraseña)
-            user.save()
-
-        # Crear o actualizar el profile asociado
-        Profile.objects.update_or_create(
-            user=user,
-            defaults=datos_profile,
-        )
-        return user
-
-    def update(self, instance, datos_validados):
-        datos_profile = {
-            'avatarUser': datos_validados.pop('avatarUser', None),
-            'rol': datos_validados.pop('rol', None),
-            'pais': datos_validados.pop('pais', None),
-            'rut': datos_validados.pop('rut', None),
-            'colegio': datos_validados.pop('colegio', None),
-            'curso': datos_validados.pop('curso', None),
-        }
-
-        # Actualizar usuario
-        for atributo, valor in datos_validados.items():
-            setattr(instance, atributo, valor)
-        instance.save()
-
-        # Actualizar profile asociado
-        Profile.objects.update_or_create(
-            user=instance,
-            defaults={k: v for k, v in datos_profile.items() if v is not None},
-        )
-        return instance
 
 class ActualizarAvatarSerializer(serializers.Serializer):
     id_imagen = serializers.IntegerField(required=True)
@@ -211,13 +160,3 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
         return datos
 
-
-class ProfileSerializer(serializers.ModelSerializer):
-    nombre_completo = serializers.SerializerMethodField() 
-
-    class Meta:
-        model = Profile
-        fields = ['pais', 'rut', 'rol', 'colegio', 'curso']
-
-    def get_nombre_completo(self, obj):       
-        return f"{obj.user.first_name} {obj.user.last_name}"
