@@ -49,3 +49,5 @@ class RespuestaEscrita(models.Model):
 
     def __str__(self):
         return f"Respuesta de {self.avance.estudiante.username} para {self.avance.etapa.nombre}"
+    
+

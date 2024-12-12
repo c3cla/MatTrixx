@@ -15,7 +15,8 @@ from .views import (
     EtapasCompletadasAPIView,
     RegistroAvancesEstudianteView,
     RespuestasEscritasPorAvanceAPIView,
-    ObtenerProgresoHabilidadView
+    ObtenerProgresoHabilidadView,
+    EstadisticasEstudianteMainDocente
 )
 
 ###################### FIN IMPORTACIONES ########################
@@ -59,6 +60,8 @@ urlpatterns = [
 
     #progresión histórica de habilidadespor estudiante
     path('progreso-habilidad/', ObtenerProgresoHabilidadView.as_view(), name='progreso-habilidad'),
+
+    path('estadistica-avance/', EstadisticasEstudianteMainDocente.as_view({'get': 'avances'}), name='estadistica-avance'),
 
 
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),

@@ -23,6 +23,8 @@ ALLOWED_HOSTS = [
     'localhost',
     'mathrix.cl',
     'www.mathrix.cl',
+    'mattrix.cl',
+    'www.mattrix.cl',
     ]
 
 
@@ -96,6 +98,8 @@ CORS_ALLOWED_ORIGINS = [
     'https://mathrix.cl',
     'https://www.mathrix.cl',
     'https://54.190.154.80',
+    'https://mattrix.cl',
+    'https://www.mattrix.cl',
 ]
 
 CORS_ALLOW_CREDENTIALS = True

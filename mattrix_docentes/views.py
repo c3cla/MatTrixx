@@ -447,92 +447,6 @@ class EstadisticaEstudianteViewSet(viewsets.ViewSet):
             print(f"Error al llamar al procedimiento almacenado: {str(e)}")
             return Response({"error": "Error interno del servidor."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
-
-    @action(detail=False, methods=["get"])
-    def avances(self, request):
-        estudiante_id = request.query_params.get("estudiante_id")
-        if not estudiante_id:
-            return Response({"error": "Estudiante ID no proporcionado."}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            estudiante_id = int(estudiante_id)
-        except ValueError:
-            return Response({"error": "Estudiante ID inválido."}, status=status.HTTP_400_BAD_REQUEST)
-
-        docente_profile = request.user.profile
-
-        if docente_profile.rol != 'teacher':
-            return Response({"error": "Acceso no autorizado."}, status=status.HTTP_403_FORBIDDEN)
-
-        try:
-            with connection.cursor() as cursor:
-                cursor.execute("""
-                    SELECT user_id 
-                    FROM mattrix_usuarios_profile 
-                    WHERE id = %s;
-                """, [estudiante_id])
-                user_id_encontrado = cursor.fetchone()
-
-            if not user_id_encontrado:
-                return Response({"error": "No se encontró el user_id para el estudiante."}, status=status.HTTP_404_NOT_FOUND)
-
-            user_id = user_id_encontrado[0]
-            
-            with connection.cursor() as cursor:
-                cursor.callproc('ObtenerAvancesEstudiante', [user_id])
-
-                # Obtener el detalle de los avances
-                resultados_detalle = cursor.fetchall()
-
-                # Cambiar al siguiente conjunto de resultados
-                cursor.nextset()
-                resultados_logro_oa = cursor.fetchall()
-
-                cursor.nextset()
-                resultados_logro_dificultad = cursor.fetchall()
-
-                cursor.nextset()
-                resultados_habilidades_matematica = cursor.fetchall()
-
-                cursor.nextset()
-                resultados_habilidades_bloom = cursor.fetchall()
-
-            # Formatear los resultados en un formato JSON
-            detalle = [
-                {
-                    "etapa": row[0],
-                    "objetivo_aprendizaje": row[1],
-                    "nivel": row[2],
-                    "habilidad_matematica": row[3],
-                    "habilidad_bloom": row[4],
-                    "dificultad": row[5],
-                    "logro": row[6],
-                    "tiempo": row[7],
-                }
-                for row in resultados_detalle
-            ]
-
-            logro_oa = [{"objetivo_aprendizaje": row[0], "promedio_logro": row[1]} for row in resultados_logro_oa]
-
-            logro_dificultad = [{"dificultad": row[0], "promedio_logro": row[1]} for row in resultados_logro_dificultad]
-
-            habilidades_matematica = [{"habilidad": row[0], "cantidad": row[1]} for row in resultados_habilidades_matematica]
-
-            habilidades_bloom = [{"habilidad": row[0], "cantidad": row[1]} for row in resultados_habilidades_bloom]
-
-            return Response({
-                "detalle": detalle,
-                "logro_oa": logro_oa,
-                "logro_dificultad": logro_dificultad,
-                "habilidades_matematica": habilidades_matematica,
-                "habilidades_bloom": habilidades_bloom,
-            })
-
-        except Exception as e:
-            return Response({"error": f"Error al ejecutar el procedimiento almacenado: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-
     @action(detail=False, methods=['get'], url_path='curso/estadisticas')
     def estadisticas_curso(self, request):
         curso_id = request.query_params.get("curso_id")
@@ -568,7 +482,141 @@ class EstadisticaEstudianteViewSet(viewsets.ViewSet):
         return Response({"error": "Curso ID no proporcionado"}, status=status.HTTP_400_BAD_REQUEST)
 
 
+
+
+
+##### Estadísticas por estudiante Main Docente
+class EstadisticasEstudianteMainDocente(viewsets.ViewSet):
+    permission_classes = [AllowAny]
+    @action(detail=False, methods=["get"])
+    def avances(self, request):
+        estudiante_id = request.query_params.get("estudiante_id")
+        if not estudiante_id:
+            return Response({"error": "Estudiante ID no proporcionado."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            estudiante_id = int(estudiante_id)
+        except ValueError:
+            return Response({"error": "Estudiante ID inválido."}, status=status.HTTP_400_BAD_REQUEST)
+
+        docente_profile = getattr(request.user, 'profile', None)
+        if not docente_profile or docente_profile.rol != 'teacher':
+            return Response({"error": "Acceso no autorizado."}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            # Obtener el user_id asociado al estudiante_id
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT user_id 
+                    FROM mattrix_usuarios_profile 
+                    WHERE id = %s;
+                """, [estudiante_id])
+                user_id_encontrado = cursor.fetchone()
+
+            if not user_id_encontrado:
+                return Response({"error": "No se encontró el user_id para el estudiante."}, status=status.HTTP_404_NOT_FOUND)
+
+            user_id = user_id_encontrado[0]
+
+            # Llamar al procedimiento almacenado correcto
+            with connection.cursor() as cursor:
+                cursor.callproc('ObtenerEstadisticasEstudianteMainDocente', [user_id])
+
+                # 1er conjunto: Logros por dificultad
+                resultados_logro_dificultad = cursor.fetchall()
+
+                cursor.nextset()
+                # 2do conjunto: Logros por habilidad matemática
+                resultados_habilidades_matematica = cursor.fetchall()
+
+                cursor.nextset()
+                # 3er conjunto: Logros por habilidad Bloom
+                resultados_habilidades_bloom = cursor.fetchall()
+
+                cursor.nextset()
+                # 4to conjunto: Gráfico de etapas (contenido_abordado, logro, fecha_completada)
+                resultados_grafico_etapas = cursor.fetchall()
+
+                cursor.nextset()
+                # 5to conjunto: Detalle extendido (id_etapa, nombre_etapa, contenido_abordado, dificultad, 
+                # habilidad_matematica, habilidad_bloom, logro, tiempo, fecha_completada)
+                resultados_detalle = cursor.fetchall()
+
+            # Dar formato a los resultados
+            logro_dificultad = [
+                {
+                    "dificultad": row[0],
+                    "promedio_logro": row[1],
+                    "cantidad_intentos": row[2]
+                }
+                for row in resultados_logro_dificultad
+            ]
+
+            habilidades_matematica = [
+                {
+                    "habilidad_matematica": row[0],
+                    "promedio_logro": row[1],
+                    "cantidad_intentos": row[2]
+                }
+                for row in resultados_habilidades_matematica
+            ]
+
+            habilidades_bloom = [
+                {
+                    "habilidad_bloom": row[0],
+                    "promedio_logro": row[1],
+                    "cantidad_intentos": row[2]
+                }
+                for row in resultados_habilidades_bloom
+            ]
+
+            grafico_etapas = [
+                {
+                    "contenido_abordado": row[0],
+                    "logro": row[1],
+                    "fecha_completada": row[2].isoformat() if row[2] else None
+                }
+                for row in resultados_grafico_etapas
+            ]
+
+            detalle = [
+                {
+                    "id_etapa": row[0],
+                    "nombre_etapa": row[1],
+                    "contenido_abordado": row[2],
+                    "dificultad": row[3],
+                    "habilidad_matematica": row[4],
+                    "habilidad_bloom": row[5],
+                    "logro": row[6],
+                    "tiempo": row[7],
+                    "fecha_completada": row[8].isoformat() if row[8] else None
+                }
+                for row in resultados_detalle
+            ]
+
+            return Response({
+                "logro_dificultad": logro_dificultad,
+                "habilidades_matematica": habilidades_matematica,
+                "habilidades_bloom": habilidades_bloom,
+                "grafico_etapas": grafico_etapas,
+                "detalle": detalle
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error": f"Error al ejecutar el procedimiento almacenado: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
+
+
+
+
+
+
+
+
+
+
+
+
 
 ############### MIS AVANCES: PERMITE VER TODAS LAS ETAPAS COMPLETADAS DEL ESTUDIANTE PARA VERLOS EN MIS AVANCES
 class EtapasCompletadasAPIView(APIView):
@@ -666,3 +714,5 @@ class DatosDocenteViewSet(viewsets.ViewSet):
         except Exception as e:
             print(f"Error: {str(e)}")
             return Response({"error": "Error interno del servidor."}, status=500)
+
+

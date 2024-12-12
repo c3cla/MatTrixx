@@ -1,15 +1,18 @@
 ###################### INICIO IMPORTACIONES ######################
 
+from django.db import IntegrityError, transaction
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from django.contrib.auth.models import User
+from django.forms import ValidationError
 
 from rest_framework import serializers
+from rest_framework.validators import UniqueValidator
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from mattrix_admin.models import Colegio, Cursos
 
-from .models import Profile, Imagenes
+from .models import Profile, Imagenes, validar_rut_general
 
 ###################### FIN IMPORTACIONES ########################
 
@@ -55,6 +58,24 @@ class ProfileSerializer(serializers.ModelSerializer):
 class UsuarioSerializer(serializers.ModelSerializer):
     profile = ProfileSerializer()
 
+    email = serializers.EmailField(
+        required=True,
+        error_messages={
+            "invalid": "El formato del mail no es correcto"  # <- mensaje personalizado
+        },
+        validators=[UniqueValidator(
+            queryset=User.objects.all(),
+            message="El correo ya está en uso"  # Por si el email es único. Si no lo es, omitirlo.
+        )]
+    )
+
+    username = serializers.CharField(
+        validators=[UniqueValidator(
+            queryset=User.objects.all(),
+            message="El nombre de usuario ya existe" # <- mensaje personalizado
+        )]
+    )
+
     class Meta:
         model = User
         fields = [
@@ -68,18 +89,45 @@ class UsuarioSerializer(serializers.ModelSerializer):
         ]
         extra_kwargs = {"password": {"write_only": True}}
 
+    def validate(self, attrs):
+        # Validar que todos los campos requeridos estén presentes (para el registro)
+        metodo = self.context.get('request').method
+        is_create = (metodo == 'POST')
+
+        # Verificación genérica de campos requeridos
+        required_fields = ['username', 'password', 'first_name', 'last_name', 'email', 'profile']
+        missing = [f for f in required_fields if f not in attrs or not attrs[f] and f != 'profile']
+        if is_create and missing:
+            raise serializers.ValidationError({"fields_required": "Todos los campos son obligatorios"})
+
+        # Validación del RUT dentro del profile
+        profile_data = attrs.get('profile', {})
+        pais = profile_data.get('pais')
+        rut = profile_data.get('rut')
+        if rut:
+            try:
+                validar_rut_general(rut, pais)
+            except ValidationError:
+                raise serializers.ValidationError({"rut_format": "El rut no es correcto"})
+        
+        return attrs
+
     def create(self, validated_data):
         profile_data = validated_data.pop('profile', {})
         password = validated_data.pop('password', None)
 
-        # Crear el usuario
-        user = User(**validated_data)
-        if password:
-            user.set_password(password)
-        user.save()
+        # Uso de una transacción atómica. Si algo falla dentro, no se escribe en la BD.
+        try:
+            with transaction.atomic():
+                user = User(**validated_data)
+                if password:
+                    user.set_password(password)
+                user.save()
 
-        # Crear el perfil relacionado
-        Profile.objects.create(user=user, **profile_data)
+                # Intentar crear el perfil. Si hay conflicto (rut duplicado) se lanza IntegrityError.
+                Profile.objects.create(user=user, **profile_data)
+        except IntegrityError as e:
+            raise serializers.ValidationError({"rut": ["Ya existe un Perfil con este Rut."]})
 
         return user
     

@@ -22,18 +22,46 @@ class UsuarioCreateView(generics.CreateAPIView):
     permission_classes = [AllowAny] 
 
 
+#Usado en Forms.jsx para mostrar mensajes de error y registro
+class UsuarioRegistroAPIView(APIView):
+    def post(self, request):
+        serializer = UsuarioSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"message": "Usuario registrado con éxito"}, status=status.HTTP_201_CREATED)
+        # Si hay errores, devolver JSON con los errores
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 # Listar todos los usuarios
 class UsuariosListView(generics.ListAPIView):
     queryset = User.objects.prefetch_related('profile')
     serializer_class = UsuarioListSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
 
 # Obtener o actualizar un usuario
 class DetalleUsuarioView(generics.RetrieveUpdateDestroyAPIView):
     queryset = User.objects.all()
     serializer_class = UsuarioSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
+
+    def update(self, instance, datos_validados):
+        profile_data = datos_validados.pop('profile', {})
+        
+        # Evitar actualización del RUT si no ha cambiado
+        rut_nuevo = profile_data.get('rut')
+        if rut_nuevo and rut_nuevo == instance.profile.rut:
+            profile_data.pop('rut', None)  # Eliminar RUT de los datos validados
+
+        # Actualizar usuario
+        for atributo, valor in datos_validados.items():
+            setattr(instance, atributo, valor)
+        instance.save()
+
+        # Actualizar profile asociado
+        Profile.objects.update_or_create(user=instance, defaults=profile_data)
+        return instance
+
 
 
 # Obtener el usuario autenticado
